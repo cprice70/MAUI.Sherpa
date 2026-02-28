@@ -19,16 +19,14 @@
 @inject ICloudSecretsService CloudSecretsService
 @inject ICloudSecretsProviderFactory CloudSecretsProviderFactory
 @inject ISecretsPublisherService SecretsPublisherService
-@inject ISecretsPublisherFactory SecretsPublisherFactory
-@inject IBackupService BackupService
 @inject IPushProjectService PushProjectService
 @inject IEncryptedSettingsService EncryptedSettings
 @inject IUpdateService UpdateService
 @implements IDisposable
-@inject IJSRuntime JS
 @inject ILauncher AppLauncher
 @inject IToolbarService ToolbarService
 @inject IPlatformService PlatformInfo
+@inject MauiSherpa.Pages.Forms.ModalParameterService ModalParams
 
 <h1><i class="fas fa-cog"></i> @ViewModel.Title</h1>
 
@@ -611,502 +609,6 @@
 </div>
 }
 
-@if (showExportDialog)
-{
-    <div class="modal-overlay" id="export-settings-modal" @onclick="CloseExportDialog">
-        <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="export-settings-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="export-settings-title">Export Settings</h2>
-                <button class="close-btn" @onclick="CloseExportDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" @bind="exportPassword" @bind:event="oninput" placeholder="Enter a secure password" tabindex="1" />
-                    <div class="help-text">This password will be required to import the backup</div>
-                </div>
-                <div class="form-group">
-                    <label>Confirm Password</label>
-                    <input type="password" @bind="exportPasswordConfirm" @bind:event="oninput" placeholder="Confirm password" tabindex="2" />
-                </div>
-                <div class="form-group">
-                    <label>Include in Backup</label>
-                    <div class="backup-selection">
-                        <label class="backup-selection-item">
-                            <input type="checkbox" @bind="exportIncludePreferences" />
-                            <span>General Settings</span>
-                        </label>
-
-                        <div class="backup-selection-group">
-                            <label class="backup-selection-item">
-                                <input type="checkbox" @bind="exportIncludeAppleIdentities" />
-                                <span>Apple Identities (@selectedExportAppleIdentityIds.Count/@appleIdentities.Count)</span>
-                            </label>
-                            @if (exportIncludeAppleIdentities && appleIdentities.Count > 0)
-                            {
-                                <div class="backup-selection-children">
-                                    @foreach (var identity in appleIdentities)
-                                    {
-                                        <label class="backup-selection-item child">
-                                            <input type="checkbox"
-                                                   checked="@selectedExportAppleIdentityIds.Contains(identity.Id)"
-                                                   @onchange="e => SetExportAppleIdentitySelection(identity.Id, e.Value is bool isChecked && isChecked)" />
-                                            <span>@identity.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-
-                        <div class="backup-selection-group">
-                            <label class="backup-selection-item">
-                                <input type="checkbox" @bind="exportIncludeCloudProviders" />
-                                <span>Cloud Secret Providers (@selectedExportCloudProviderIds.Count/@cloudProviders.Count)</span>
-                            </label>
-                            @if (exportIncludeCloudProviders && cloudProviders.Count > 0)
-                            {
-                                <div class="backup-selection-children">
-                                    @foreach (var provider in cloudProviders)
-                                    {
-                                        <label class="backup-selection-item child">
-                                            <input type="checkbox"
-                                                   checked="@selectedExportCloudProviderIds.Contains(provider.Id)"
-                                                   @onchange="e => SetExportCloudProviderSelection(provider.Id, e.Value is bool isChecked && isChecked)" />
-                                            <span>@provider.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-
-                        <div class="backup-selection-group">
-                            <label class="backup-selection-item">
-                                <input type="checkbox" @bind="exportIncludeSecretsPublishers" />
-                                <span>CI/CD Publishers (@selectedExportPublisherIds.Count/@secretsPublishers.Count)</span>
-                            </label>
-                            @if (exportIncludeSecretsPublishers && secretsPublishers.Count > 0)
-                            {
-                                <div class="backup-selection-children">
-                                    @foreach (var publisher in secretsPublishers)
-                                    {
-                                        <label class="backup-selection-item child">
-                                            <input type="checkbox"
-                                                   checked="@selectedExportPublisherIds.Contains(publisher.Id)"
-                                                   @onchange="e => SetExportPublisherSelection(publisher.Id, e.Value is bool isChecked && isChecked)" />
-                                            <span>@publisher.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-
-                        <div class="backup-selection-group">
-                            <label class="backup-selection-item">
-                                <input type="checkbox" @bind="exportIncludeGoogleIdentities" />
-                                <span>Android Identities (@selectedExportGoogleIdentityIds.Count/@googleIdentities.Count)</span>
-                            </label>
-                            @if (exportIncludeGoogleIdentities && googleIdentities.Count > 0)
-                            {
-                                <div class="backup-selection-children">
-                                    @foreach (var identity in googleIdentities)
-                                    {
-                                        <label class="backup-selection-item child">
-                                            <input type="checkbox"
-                                                   checked="@selectedExportGoogleIdentityIds.Contains(identity.Id)"
-                                                   @onchange="e => SetExportGoogleIdentitySelection(identity.Id, e.Value is bool isChecked && isChecked)" />
-                                            <span>@identity.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-
-                        <div class="backup-selection-group">
-                            <label class="backup-selection-item">
-                                <input type="checkbox" @bind="exportIncludePushProjects" />
-                                <span>Push Projects (@selectedExportPushProjectIds.Count/@pushProjects.Count)</span>
-                            </label>
-                            @if (exportIncludePushProjects && pushProjects.Count > 0)
-                            {
-                                <div class="backup-selection-children">
-                                    @foreach (var project in pushProjects)
-                                    {
-                                        <label class="backup-selection-item child">
-                                            <input type="checkbox"
-                                                   checked="@selectedExportPushProjectIds.Contains(project.Id)"
-                                                   @onchange="e => SetExportPushProjectSelection(project.Id, e.Value is bool isChecked && isChecked)" />
-                                            <span>@project.Name (@(project.Platform == PushProjectPlatform.Apns ? "APNs" : "FCM"))</span>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                    @if (!CanExportSelection)
-                    {
-                        <div class="help-text">Select at least one item to export.</div>
-                    }
-                </div>
-                @if (!string.IsNullOrEmpty(exportError))
-                {
-                    <div class="error-message">@exportError</div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseExportDialog" tabindex="4">Cancel</button>
-                <button class="btn btn-primary" @onclick="ExportSettings" tabindex="3"
-                        disabled="@(string.IsNullOrEmpty(exportPassword) || exportPassword != exportPasswordConfirm || !CanExportSelection)">
-                    <i class="fas fa-download"></i> Export
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (showImportDialog)
-{
-    <div class="modal-overlay" id="import-settings-modal" @onclick="CloseImportDialog">
-        <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="import-settings-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="import-settings-title">Import Settings</h2>
-                <button class="close-btn" @onclick="CloseImportDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Backup File</label>
-                    <div class="file-input-group">
-                        <input type="text" value="@importFilePath" placeholder="Select backup file" readonly />
-                        <button class="btn btn-secondary" @onclick="BrowseImportFile">
-                            <i class="fas fa-folder-open"></i> Browse
-                        </button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" @bind="importPassword" @bind:event="oninput" placeholder="Enter backup password" />
-                </div>
-                @if (!string.IsNullOrEmpty(importError))
-                {
-                    <div class="error-message">@importError</div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseImportDialog">Cancel</button>
-                <button class="btn btn-primary" @onclick="ImportSettings"
-                        disabled="@(string.IsNullOrEmpty(importFilePath) || string.IsNullOrEmpty(importPassword))">
-                    <i class="fas fa-upload"></i> Import
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (showIdentityDialog)
-{
-    <div class="modal-overlay" id="identity-modal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="identity-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="identity-title">@(editingIdentity == null ? "Add" : "Edit") Apple Identity</h2>
-                <button class="close-btn" @onclick="CloseIdentityDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" @bind="identityName" placeholder="My Team" />
-                    <div class="help-text">A friendly name to identify this credential</div>
-                </div>
-                <div class="form-group">
-                    <label>Key ID</label>
-                    <input type="text" @bind="identityKeyId" placeholder="ABC123XYZ" />
-                    <div class="help-text">The 10-character Key ID from App Store Connect</div>
-                </div>
-                <div class="form-group">
-                    <label>Issuer ID (Team ID)</label>
-                    <input type="text" @bind="identityIssuerId" placeholder="12345678-1234-1234-1234-123456789012" />
-                    <div class="help-text">Your Issuer ID (UUID format) from App Store Connect → Users and Access → Keys</div>
-                </div>
-                <div class="form-group">
-                    <label>Private Key (.p8)</label>
-                    <div class="p8-input-toggle">
-                        <button class="toggle-btn @(p8InputMode == "file" ? "active" : "")" @onclick="@(() => p8InputMode = "file")">
-                            <i class="fas fa-folder-open"></i> File
-                        </button>
-                        <button class="toggle-btn @(p8InputMode == "text" ? "active" : "")" @onclick="@(() => p8InputMode = "text")">
-                            <i class="fas fa-file-alt"></i> Text
-                        </button>
-                    </div>
-                    @if (p8InputMode == "file")
-                    {
-                        <div class="file-input-group">
-                            <input type="text" value="@identityP8Path" placeholder="Path to .p8 file" readonly />
-                            <button class="btn btn-secondary" @onclick="BrowseP8File">
-                                <i class="fas fa-folder-open"></i> Browse...
-                            </button>
-                        </div>
-                        <div class="help-text">Select your AuthKey_XXXXXX.p8 file downloaded from App Store Connect</div>
-                    }
-                    else
-                    {
-                        <textarea @bind="identityP8Content" 
-                                  placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" 
-                                  rows="6"
-                                  class="p8-textarea"></textarea>
-                        <div class="help-text">Paste the contents of your .p8 file (including BEGIN/END lines)</div>
-                    }
-                </div>
-                @if (!string.IsNullOrEmpty(identityP8Content))
-                {
-                    <div class="p8-preview">
-                        <span class="p8-loaded"><i class="fas fa-check-circle"></i> P8 key loaded (@identityP8Content.Length chars)</span>
-                    </div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseIdentityDialog">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button class="btn btn-primary" @onclick="SaveIdentity" 
-                        disabled="@(!CanSaveIdentity)">
-                    <i class="fas fa-save"></i> Save
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (showGoogleIdentityDialog)
-{
-    <div class="modal-overlay" id="google-identity-modal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="google-identity-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="google-identity-title">@(editingGoogleIdentity == null ? "Add" : "Edit") Google Identity</h2>
-                <button class="close-btn" @onclick="CloseGoogleIdentityDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" @bind="googleIdentityName" placeholder="My Firebase Project" />
-                    <div class="help-text">A friendly name to identify this credential</div>
-                </div>
-                <div class="form-group">
-                    <label>Service Account JSON</label>
-                    <div class="help-text" style="margin-bottom: 0.5rem;">
-                        Download from <a href="https://console.firebase.google.com/project/_/settings/serviceaccounts/adminsdk" target="_blank">Firebase Console → Project Settings → Service Accounts</a> → Generate New Private Key
-                    </div>
-                    <div class="p8-input-toggle">
-                        <button class="toggle-btn @(saJsonInputMode == "file" ? "active" : "")" @onclick="@(() => saJsonInputMode = "file")">
-                            <i class="fas fa-folder-open"></i> File
-                        </button>
-                        <button class="toggle-btn @(saJsonInputMode == "text" ? "active" : "")" @onclick="@(() => saJsonInputMode = "text")">
-                            <i class="fas fa-paste"></i> Paste
-                        </button>
-                    </div>
-                    @if (saJsonInputMode == "file")
-                    {
-                        <div class="file-input-group">
-                            <input type="text" value="@googleIdentitySaJsonPath" placeholder="Path to service account JSON file" readonly />
-                            <button class="btn btn-secondary" @onclick="BrowseServiceAccountJsonFile">
-                                <i class="fas fa-folder-open"></i> Browse...
-                            </button>
-                        </div>
-                    }
-                    else
-                    {
-                        <textarea @bind="googleIdentitySaJsonContent" @bind:after="ParseServiceAccountJson"
-                                  placeholder='{"type": "service_account", "project_id": "...", ...}'
-                                  rows="8"
-                                  class="p8-textarea"></textarea>
-                    }
-                </div>
-                @if (!string.IsNullOrEmpty(googleIdentitySaJsonContent))
-                {
-                    @if (!string.IsNullOrEmpty(parsedProjectId))
-                    {
-                        <div class="p8-preview">
-                            <span class="p8-loaded"><i class="fas fa-check-circle"></i> Service account loaded — Project: <strong>@parsedProjectId</strong>, Email: <strong>@parsedClientEmail</strong></span>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="p8-preview">
-                            <span class="p8-error"><i class="fas fa-exclamation-triangle"></i> Invalid service account JSON format</span>
-                        </div>
-                    }
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseGoogleIdentityDialog">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button class="btn btn-primary" @onclick="SaveGoogleIdentity"
-                        disabled="@(!CanSaveGoogleIdentity)">
-                    <i class="fas fa-save"></i> Save
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (showProviderDialog)
-{
-    <div class="modal-overlay" id="cloud-provider-modal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cloud-provider-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="cloud-provider-title">@(editingProvider == null ? "Add" : "Edit") Cloud Provider</h2>
-                <button class="close-btn" @onclick="CloseProviderDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" @bind="providerName" placeholder="My Team Vault" />
-                    <div class="help-text">A friendly name to identify this provider</div>
-                </div>
-                <div class="form-group">
-                    <label>Provider Type</label>
-                    @if (editingProvider != null)
-                    {
-                        <input type="text" value="@CloudSecretsProviderFactory.GetProviderDisplayName(providerType)" disabled />
-                    }
-                    else
-                    {
-                        <div class="provider-type-selector">
-                            @foreach (var type in CloudSecretsProviderFactory.SupportedProviders)
-                            {
-                                <div class="provider-type-card @(providerType == type ? "selected" : "")" 
-                                     @onclick="@(() => providerType = type)">
-                                    <i class="@GetProviderIcon(type) provider-icon"></i>
-                                    <span class="provider-name">@CloudSecretsProviderFactory.GetProviderDisplayName(type)</span>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-                
-                @foreach (var setting in GetCurrentProviderSettings())
-                {
-                    <div class="form-group">
-                        <label>@setting.DisplayName @(setting.IsRequired ? "*" : "")</label>
-                        @if (setting.IsSecret)
-                        {
-                            <input type="password" 
-                                   value="@(providerSettings.GetValueOrDefault(setting.Key, ""))"
-                                   @onchange="@(e => providerSettings[setting.Key] = e.Value?.ToString() ?? "")"
-                                   placeholder="@setting.Placeholder" />
-                        }
-                        else if (setting.Key == "CredentialsJson")
-                        {
-                            <textarea rows="6"
-                                      class="p8-textarea"
-                                      @bind="@providerSettings[setting.Key]"
-                                      placeholder="@setting.Placeholder"></textarea>
-                        }
-                        else
-                        {
-                            <input type="text" 
-                                   value="@(providerSettings.GetValueOrDefault(setting.Key, setting.DefaultValue ?? ""))"
-                                   @onchange="@(e => providerSettings[setting.Key] = e.Value?.ToString() ?? "")"
-                                   placeholder="@setting.Placeholder" />
-                        }
-                        <div class="help-text">@setting.Description</div>
-                    </div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseProviderDialog">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button class="btn btn-primary" @onclick="SaveProvider" 
-                        disabled="@(!CanSaveProvider)">
-                    <i class="fas fa-save"></i> Save
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (showPublisherDialog)
-{
-    <div class="modal-overlay" id="publisher-modal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="publisher-title" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h2 id="publisher-title">@(editingPublisher == null ? "Add" : "Edit") CI/CD Publisher</h2>
-                <button class="close-btn" @onclick="ClosePublisherDialog">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" @bind="publisherName" placeholder="My GitHub Account" />
-                    <div class="help-text">A friendly name to identify this publisher</div>
-                </div>
-                <div class="form-group">
-                    <label>Provider Type</label>
-                    @if (editingPublisher != null)
-                    {
-                        <input type="text" value="@GetPublisherDisplayName(publisherProviderId)" disabled />
-                    }
-                    else
-                    {
-                        <div class="provider-type-selector">
-                            @foreach (var (providerId, displayName, iconClass) in SecretsPublisherFactory.GetAvailableProviders())
-                            {
-                                <div class="provider-type-card @(publisherProviderId == providerId ? "selected" : "")" 
-                                     @onclick="@(() => publisherProviderId = providerId)">
-                                    <i class="@iconClass provider-icon"></i>
-                                    <span class="provider-name">@displayName</span>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-                
-                @foreach (var (key, label, type, required, placeholder) in SecretsPublisherFactory.GetRequiredSettings(publisherProviderId))
-                {
-                    <div class="form-group">
-                        <label>@label @(required ? "*" : "")</label>
-                        @if (type == "password")
-                        {
-                            <input type="password" 
-                                   value="@(publisherSettings.GetValueOrDefault(key, ""))"
-                                   @onchange="@(e => publisherSettings[key] = e.Value?.ToString() ?? "")"
-                                   placeholder="@placeholder" />
-                        }
-                        else if (type == "url")
-                        {
-                            <input type="url" 
-                                   value="@(publisherSettings.GetValueOrDefault(key, ""))"
-                                   @onchange="@(e => publisherSettings[key] = e.Value?.ToString() ?? "")"
-                                   placeholder="@placeholder" />
-                        }
-                        else
-                        {
-                            <input type="text" 
-                                   value="@(publisherSettings.GetValueOrDefault(key, ""))"
-                                   @onchange="@(e => publisherSettings[key] = e.Value?.ToString() ?? "")"
-                                   placeholder="@placeholder" />
-                        }
-                        @if (key == "PersonalAccessToken" && publisherProviderId == "github")
-                        {
-                            <div class="help-text">
-                                Generate a PAT with <code>repo</code> scope at 
-                                <a href="#" @onclick:preventDefault @onclick='() => OpenUrl("https://github.com/settings/tokens/new?scopes=repo&description=MauiSherpa")'>GitHub Settings</a>
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="ClosePublisherDialog">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button class="btn btn-primary" @onclick="SavePublisher" 
-                        disabled="@(!CanSavePublisher)">
-                    <i class="fas fa-save"></i> Save
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
 <UpdateAvailableModal
     @ref="updateModal"
     UpdateResult="@updateResult"
@@ -1487,146 +989,6 @@
     .empty-identities { padding: 1.25rem; text-align: center; color: var(--text-muted); }
     .add-identity { margin-top: 1rem; }
 
-    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal { background: var(--card-bg); border-radius: 0.75rem; width: 90%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.3); }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
-    .modal-header h2 { margin: 0; font-size: 1.125rem; color: var(--text-primary); }
-    .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; }
-    .modal-body { padding: 1.5rem; overflow-y: auto; flex: 1; }
-    .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.75rem; flex-shrink: 0; }
-
-    .form-group { margin-bottom: 1.25rem; }
-    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-secondary); }
-    .form-group input { width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; box-sizing: border-box; background: var(--bg-tertiary); color: var(--text-primary); }
-    .form-group input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
-    .form-group select { 
-        width: 100%; 
-        padding: 0.625rem 0.75rem; 
-        border: 1px solid var(--border-color); 
-        border-radius: 0.375rem; 
-        font-size: 0.875rem; 
-        box-sizing: border-box;
-        background-color: var(--bg-tertiary);
-        color: var(--text-primary);
-        cursor: pointer;
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 0.75rem center;
-        padding-right: 36px;
-    }
-    .form-group select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
-    .form-group select:disabled { 
-        background-color: var(--bg-tertiary); 
-        color: var(--text-muted); 
-        cursor: not-allowed;
-    }
-    .help-text { margin-top: 0.375rem; font-size: 0.75rem; color: var(--text-muted); }
-
-    /* Provider Type Selector Cards */
-    .provider-type-selector {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 0.75rem;
-        margin-top: 0.5rem;
-    }
-
-    .provider-type-card {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 1rem 0.75rem;
-        border: 2px solid var(--border-color);
-        border-radius: 0.5rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        background: var(--bg-tertiary);
-    }
-
-    .provider-type-card:hover {
-        border-color: var(--accent-primary);
-        background: rgba(66, 153, 225, 0.05);
-    }
-
-    .provider-type-card.selected {
-        border-color: var(--accent-primary);
-        background: rgba(66, 153, 225, 0.1);
-        box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
-    }
-
-    .provider-type-card.disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    .provider-type-card .provider-icon {
-        font-size: 1.75rem;
-        margin-bottom: 0.5rem;
-        color: var(--text-secondary);
-    }
-
-    .provider-type-card.selected .provider-icon {
-        color: var(--accent-primary);
-    }
-
-    .provider-type-card .provider-name {
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--text-primary);
-        text-align: center;
-    }
-
-    .provider-type-card .coming-soon-badge {
-        position: absolute;
-        top: 0.25rem;
-        right: 0.25rem;
-        font-size: 0.5625rem;
-        padding: 2px 0.375rem;
-        background: var(--warning-color, #f59e0b);
-        color: white;
-        border-radius: 0.25rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-
-    .file-input-group { display: flex; gap: 0.5rem; }
-    .file-input-group input { flex: 1; }
-
-    .p8-input-toggle { display: flex; gap: 0; margin-bottom: 0.75rem; }
-    .toggle-btn { 
-        padding: 0.5rem 1rem; 
-        border: 1px solid var(--border-color); 
-        background: var(--bg-tertiary); 
-        cursor: pointer; 
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        transition: all 0.15s;
-    }
-    .toggle-btn:first-child { border-radius: 0.375rem 0 0 0.375rem; }
-    .toggle-btn:last-child { border-radius: 0 0.375rem 0.375rem 0; border-left: none; }
-    .toggle-btn.active { 
-        background: var(--accent-primary); 
-        color: var(--card-bg); 
-        border-color: var(--accent-primary); 
-    }
-    .toggle-btn:hover:not(.active) { background: var(--bg-tertiary); }
-
-    .p8-textarea {
-        width: 100%;
-        padding: 0.625rem 0.75rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.375rem;
-        font-size: 0.8125rem;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        resize: vertical;
-        min-height: 120px;
-    }
-    .p8-textarea:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
-
-    .p8-preview { margin-top: 0.5rem; }
-    .p8-loaded { color: #38a169; font-size: 0.8125rem; }
-    .p8-error { color: var(--status-error-text, #e53e3e); font-size: 0.8125rem; }
-
     /* Cloud Provider Styles */
     .empty-providers { padding: 1.25rem; text-align: center; color: var(--text-muted); }
     .add-provider { margin-top: 1rem; }
@@ -1709,44 +1071,6 @@
         gap: 1rem;
     }
 
-    .backup-selection {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .backup-selection-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.375rem;
-    }
-
-    .backup-selection-children {
-        margin-left: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
-    .backup-selection-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.875rem;
-        color: var(--text-primary);
-    }
-
-    .backup-selection-item.child {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-    }
-
-    .backup-selection-item input[type="checkbox"] {
-        width: 1rem;
-        height: 1rem;
-        margin: 0;
-    }
-
     .backup-action-card {
         display: flex;
         align-items: center;
@@ -1795,24 +1119,6 @@
         color: var(--text-muted);
         line-height: 1.4;
     }
-
-    .modal-sm {
-        max-width: 440px;
-    }
-
-    .error-message {
-        background: rgba(245, 101, 101, 0.1);
-        border: 1px solid rgba(245, 101, 101, 0.3);
-        color: #c53030;
-        padding: 0.625rem 0.875rem;
-        border-radius: 0.375rem;
-        font-size: 0.8125rem;
-    }
-
-    .theme-dark .error-message {
-        background: rgba(245, 101, 101, 0.15);
-        color: #fc8181;
-    }
 </style>
 
 @code {
@@ -1828,25 +1134,9 @@
     private UpdateCheckResult? updateResult;
     private bool showUpdateDialog = false;
     private UpdateAvailableModal? updateModal;
-    private bool showIdentityDialog = false;
-    private AppleIdentity? editingIdentity = null;
-    private string identityName = "";
-    private string identityKeyId = "";
-    private string identityIssuerId = "";
-    private string identityP8Path = "";
-    private string identityP8Content = "";
-    private string p8InputMode = "file"; // "file" or "text"
 
     // Google identity state
     private List<GoogleIdentity> googleIdentities = new();
-    private bool showGoogleIdentityDialog = false;
-    private GoogleIdentity? editingGoogleIdentity = null;
-    private string googleIdentityName = "";
-    private string googleIdentitySaJsonPath = "";
-    private string googleIdentitySaJsonContent = "";
-    private string saJsonInputMode = "file"; // "file" or "text"
-    private string parsedProjectId = "";
-    private string parsedClientEmail = "";
     
     private bool isLoadingSdk = true;
     private bool isLoadingJdk = true;
@@ -1862,82 +1152,13 @@
     
     // Cloud provider state
     private List<CloudSecretsProviderConfig> cloudProviders = new();
-    private bool showProviderDialog = false;
-    private CloudSecretsProviderConfig? editingProvider = null;
-    private string providerName = "";
-    private CloudSecretsProviderType providerType = CloudSecretsProviderType.Infisical;
-    private Dictionary<string, string> providerSettings = new();
 
     // CI/CD Publisher state
     private List<SecretsPublisherConfig> secretsPublishers = new();
-    private bool showPublisherDialog = false;
-    private SecretsPublisherConfig? editingPublisher = null;
-    private string publisherName = "";
-    private string publisherProviderId = "github";
-    private Dictionary<string, string> publisherSettings = new();
 
     // Backup/Restore state
-    private bool showExportDialog = false;
-    private bool showImportDialog = false;
-    private string exportPassword = "";
-    private string exportPasswordConfirm = "";
-    private string exportError = "";
-    private bool exportIncludePreferences = true;
-    private bool exportIncludeAppleIdentities = true;
-    private bool exportIncludeCloudProviders = true;
-    private bool exportIncludeSecretsPublishers = true;
-    private HashSet<string> selectedExportAppleIdentityIds = new(StringComparer.Ordinal);
-    private HashSet<string> selectedExportCloudProviderIds = new(StringComparer.Ordinal);
-    private HashSet<string> selectedExportPublisherIds = new(StringComparer.Ordinal);
-    private bool exportIncludeGoogleIdentities = true;
-    private HashSet<string> selectedExportGoogleIdentityIds = new(StringComparer.Ordinal);
-    private bool exportIncludePushProjects = true;
-    private HashSet<string> selectedExportPushProjectIds = new(StringComparer.Ordinal);
-    private List<PushProject> pushProjects = new();
-    private string importFilePath = "";
-    private string importPassword = "";
-    private string importError = "";
     private bool isExporting = false;
     private bool isImporting = false;
-
-    private bool CanExportSelection =>
-        exportIncludePreferences ||
-        (exportIncludeAppleIdentities && selectedExportAppleIdentityIds.Count > 0) ||
-        (exportIncludeCloudProviders && selectedExportCloudProviderIds.Count > 0) ||
-        (exportIncludeSecretsPublishers && selectedExportPublisherIds.Count > 0) ||
-        (exportIncludeGoogleIdentities && selectedExportGoogleIdentityIds.Count > 0) ||
-        (exportIncludePushProjects && selectedExportPushProjectIds.Count > 0);
-
-    private bool CanSaveIdentity => 
-        !string.IsNullOrWhiteSpace(identityName) &&
-        !string.IsNullOrWhiteSpace(identityKeyId) &&
-        !string.IsNullOrWhiteSpace(identityIssuerId) &&
-        !string.IsNullOrWhiteSpace(identityP8Content);
-
-    private bool CanSaveGoogleIdentity =>
-        !string.IsNullOrWhiteSpace(googleIdentityName) &&
-        !string.IsNullOrWhiteSpace(googleIdentitySaJsonContent) &&
-        !string.IsNullOrEmpty(parsedProjectId);
-    
-    private bool CanSaveProvider
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(providerName)) return false;
-            var requiredSettings = GetCurrentProviderSettings().Where(s => s.IsRequired);
-            return requiredSettings.All(s => !string.IsNullOrWhiteSpace(providerSettings.GetValueOrDefault(s.Key)));
-        }
-    }
-
-    private bool CanSavePublisher
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(publisherName)) return false;
-            var (isValid, _) = SecretsPublisherFactory.ValidateConfig(publisherProviderId, publisherSettings);
-            return isValid;
-        }
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -2060,9 +1281,6 @@
         JdkSettings.JdkPathChanged -= OnJdkPathChanged;
         CloudSecretsService.OnActiveProviderChanged -= OnCloudProviderChanged;
         SecretsPublisherService.OnPublishersChanged -= OnPublishersChanged;
-        foreach (var id in _activeModals)
-            try { JS.InvokeVoidAsync("modalInterop.dispose", id); } catch { }
-        _dotNetRef?.Dispose();
     }
 
     private async Task LoadAppleIdentities()
@@ -2147,8 +1365,8 @@
             {
                 case "save": await SaveSettings(); break;
                 case "reset": await ResetSettings(); break;
-                case "export": ShowExportDialog(); break;
-                case "import-settings": ShowImportDialog(); break;
+                case "export": await ShowExportDialog(); break;
+                case "import-settings": await ShowImportDialog(); break;
             }
             StateHasChanged();
         });
@@ -2186,17 +1404,9 @@
         ThemeService.SetFontScale(ViewModel.FontScale);
     }
 
-    private void ShowAddIdentityDialog()
+    private async Task ShowAddIdentityDialog()
     {
-        editingIdentity = null;
-        identityName = "";
-        identityKeyId = "";
-        identityIssuerId = "";
-        identityP8Path = "";
-        identityP8Content = "";
-        p8InputMode = "file";
-        showIdentityDialog = true;
-        _ = InitModalAsync("identity-modal");
+        await ShowIdentityModalAsync(null);
     }
 
     private async Task ApplySdkPath()
@@ -2390,59 +1600,32 @@
         }
     }
 
-    private void EditIdentity(AppleIdentity identity)
+    private async Task EditIdentity(AppleIdentity identity)
     {
-        editingIdentity = identity;
-        identityName = identity.Name;
-        identityKeyId = identity.KeyId;
-        identityIssuerId = identity.IssuerId;
-        identityP8Path = identity.P8KeyPath ?? "";
-        identityP8Content = identity.P8KeyContent ?? "";
-        // If we have content but no path, default to text mode
-        p8InputMode = string.IsNullOrEmpty(identity.P8KeyPath) && !string.IsNullOrEmpty(identity.P8KeyContent) ? "text" : "file";
-        showIdentityDialog = true;
-        _ = InitModalAsync("identity-modal");
+        await ShowIdentityModalAsync(identity);
     }
 
-    private void CloseIdentityDialog()
+    private async Task ShowIdentityModalAsync(AppleIdentity? identity)
     {
-        showIdentityDialog = false;
-        _ = DisposeModalAsync("identity-modal");
-        editingIdentity = null;
-    }
+        ModalParams.Clear();
+        if (identity != null)
+            ModalParams.Set("Identity", identity);
 
-    private async Task BrowseP8File()
-    {
-        var path = await DialogService.ShowFileDialogAsync(
-            "Select P8 Key File",
-            isSave: false,
-            filters: new[] { "*.p8" });
+        var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+        if (nav == null) return;
 
-        if (!string.IsNullOrEmpty(path))
+        var resultTask = ModalParams.WaitForResultAsync();
+        var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/apple-identity", 500, 550);
+        await nav.PushModalAsync(page, animated: true);
+        var result = await resultTask;
+        await nav.PopModalAsync(animated: true);
+
+        if (result is AppleIdentity saved)
         {
-            identityP8Path = path;
-            identityP8Content = await FileSystem.ReadFileAsync(path) ?? "";
-            await InvokeAsync(StateHasChanged);
+            await AppleIdentityService.SaveIdentityAsync(saved);
+            await AlertService.ShowToastAsync($"Identity '{saved.Name}' saved");
+            await LoadAppleIdentities();
         }
-    }
-
-    private async Task SaveIdentity()
-    {
-        var id = editingIdentity?.Id ?? Guid.NewGuid().ToString();
-        
-        var identity = new AppleIdentity(
-            Id: id,
-            Name: identityName.Trim(),
-            KeyId: identityKeyId.Trim(),
-            IssuerId: identityIssuerId.Trim(),
-            P8KeyPath: string.IsNullOrEmpty(identityP8Path) ? null : identityP8Path,
-            P8KeyContent: identityP8Content);
-
-        await AppleIdentityService.SaveIdentityAsync(identity);
-        await AlertService.ShowToastAsync($"Identity '{identityName}' saved");
-        
-        CloseIdentityDialog();
-        await LoadAppleIdentities();
     }
 
     private async Task TestIdentity(AppleIdentity identity)
@@ -2480,87 +1663,37 @@
 
     // Google Identity Methods
 
-    private void ShowAddGoogleIdentityDialog()
+    private async Task ShowAddGoogleIdentityDialog()
     {
-        editingGoogleIdentity = null;
-        googleIdentityName = "";
-        googleIdentitySaJsonPath = "";
-        googleIdentitySaJsonContent = "";
-        saJsonInputMode = "file";
-        parsedProjectId = "";
-        parsedClientEmail = "";
-        showGoogleIdentityDialog = true;
-        _ = InitModalAsync("google-identity-modal");
+        await ShowGoogleIdentityModalAsync(null);
     }
 
-    private void EditGoogleIdentity(GoogleIdentity identity)
+    private async Task EditGoogleIdentity(GoogleIdentity identity)
     {
-        editingGoogleIdentity = identity;
-        googleIdentityName = identity.Name;
-        googleIdentitySaJsonPath = identity.ServiceAccountJsonPath ?? "";
-        googleIdentitySaJsonContent = identity.ServiceAccountJson ?? "";
-        saJsonInputMode = string.IsNullOrEmpty(identity.ServiceAccountJsonPath) && !string.IsNullOrEmpty(identity.ServiceAccountJson) ? "text" : "file";
-        ParseServiceAccountJson();
-        showGoogleIdentityDialog = true;
-        _ = InitModalAsync("google-identity-modal");
+        await ShowGoogleIdentityModalAsync(identity);
     }
 
-    private void CloseGoogleIdentityDialog()
+    private async Task ShowGoogleIdentityModalAsync(GoogleIdentity? identity)
     {
-        showGoogleIdentityDialog = false;
-        _ = DisposeModalAsync("google-identity-modal");
-        editingGoogleIdentity = null;
-    }
+        ModalParams.Clear();
+        if (identity != null)
+            ModalParams.Set("Identity", identity);
 
-    private async Task BrowseServiceAccountJsonFile()
-    {
-        var path = await DialogService.ShowFileDialogAsync(
-            "Select Service Account JSON File",
-            isSave: false,
-            filters: new[] { "*.json" });
+        var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+        if (nav == null) return;
 
-        if (!string.IsNullOrEmpty(path))
+        var resultTask = ModalParams.WaitForResultAsync();
+        var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/google-identity", 500, 550);
+        await nav.PushModalAsync(page, animated: true);
+        var result = await resultTask;
+        await nav.PopModalAsync(animated: true);
+
+        if (result is GoogleIdentity saved)
         {
-            googleIdentitySaJsonPath = path;
-            googleIdentitySaJsonContent = await FileSystem.ReadFileAsync(path) ?? "";
-            ParseServiceAccountJson();
-            await InvokeAsync(StateHasChanged);
+            await GoogleIdentityService.SaveIdentityAsync(saved);
+            await AlertService.ShowToastAsync($"Google identity '{saved.Name}' saved");
+            await LoadGoogleIdentities();
         }
-    }
-
-    private void ParseServiceAccountJson()
-    {
-        var (projectId, clientEmail) = MauiSherpa.Core.Services.GoogleIdentityService.ParseServiceAccountJson(googleIdentitySaJsonContent);
-        parsedProjectId = projectId ?? "";
-        parsedClientEmail = clientEmail ?? "";
-
-        // Auto-fill name if empty
-        if (string.IsNullOrEmpty(googleIdentityName) && !string.IsNullOrEmpty(parsedProjectId))
-        {
-            googleIdentityName = parsedProjectId;
-        }
-    }
-
-    private async Task SaveGoogleIdentity()
-    {
-        // Re-parse to ensure we have current values
-        ParseServiceAccountJson();
-
-        var id = editingGoogleIdentity?.Id ?? Guid.NewGuid().ToString();
-
-        var identity = new GoogleIdentity(
-            Id: id,
-            Name: googleIdentityName.Trim(),
-            ProjectId: parsedProjectId,
-            ClientEmail: parsedClientEmail,
-            ServiceAccountJsonPath: string.IsNullOrEmpty(googleIdentitySaJsonPath) ? null : googleIdentitySaJsonPath,
-            ServiceAccountJson: googleIdentitySaJsonContent);
-
-        await GoogleIdentityService.SaveIdentityAsync(identity);
-        await AlertService.ShowToastAsync($"Google identity '{googleIdentityName}' saved");
-
-        CloseGoogleIdentityDialog();
-        await LoadGoogleIdentities();
     }
 
     private async Task TestGoogleIdentity(GoogleIdentity identity)
@@ -2662,61 +1795,37 @@
         return $"https://console.cloud.google.com/security/secret-manager?project={projectId}";
     }
     
-    private IReadOnlyList<CloudProviderSettingInfo> GetCurrentProviderSettings()
+    private async Task ShowAddProviderDialog()
     {
-        return CloudSecretsProviderFactory.GetProviderSettings(providerType);
+        await ShowProviderModalAsync(null);
     }
     
-    private void ShowAddProviderDialog()
+    private async Task EditProvider(CloudSecretsProviderConfig provider)
     {
-        editingProvider = null;
-        providerName = "";
-        providerType = CloudSecretsProviderFactory.SupportedProviders.FirstOrDefault();
-        providerSettings = new Dictionary<string, string>();
-        
-        // Initialize with default values
-        foreach (var setting in GetCurrentProviderSettings())
+        await ShowProviderModalAsync(provider);
+    }
+
+    private async Task ShowProviderModalAsync(CloudSecretsProviderConfig? provider)
+    {
+        ModalParams.Clear();
+        if (provider != null)
+            ModalParams.Set("Provider", provider);
+
+        var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+        if (nav == null) return;
+
+        var resultTask = ModalParams.WaitForResultAsync();
+        var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/cloud-provider", 550, 550);
+        await nav.PushModalAsync(page, animated: true);
+        var result = await resultTask;
+        await nav.PopModalAsync(animated: true);
+
+        if (result is CloudSecretsProviderConfig saved)
         {
-            if (!string.IsNullOrEmpty(setting.DefaultValue))
-            {
-                providerSettings[setting.Key] = setting.DefaultValue;
-            }
+            await CloudSecretsService.SaveProviderAsync(saved);
+            await AlertService.ShowToastAsync($"Provider '{saved.Name}' saved");
+            await LoadCloudProviders();
         }
-        
-        showProviderDialog = true;
-        _ = InitModalAsync("cloud-provider-modal");
-    }
-    
-    private void EditProvider(CloudSecretsProviderConfig provider)
-    {
-        editingProvider = provider;
-        providerName = provider.Name;
-        providerType = provider.ProviderType;
-        providerSettings = new Dictionary<string, string>(provider.Settings);
-        showProviderDialog = true;
-        _ = InitModalAsync("cloud-provider-modal");
-    }
-    
-    private void CloseProviderDialog()
-    {
-        showProviderDialog = false;
-        _ = DisposeModalAsync("cloud-provider-modal");
-        editingProvider = null;
-    }
-    
-    private async Task SaveProvider()
-    {
-        var config = new CloudSecretsProviderConfig(
-            editingProvider?.Id ?? Guid.NewGuid().ToString("N"),
-            providerName,
-            providerType,
-            new Dictionary<string, string>(providerSettings)
-        );
-        
-        await CloudSecretsService.SaveProviderAsync(config);
-        await AlertService.ShowToastAsync($"Provider '{providerName}' saved");
-        CloseProviderDialog();
-        await LoadCloudProviders();
     }
     
     private async Task DeleteProvider(CloudSecretsProviderConfig provider)
@@ -2773,46 +1882,37 @@
         _ => providerId
     };
 
-    private void ShowAddPublisherDialog()
+    private async Task ShowAddPublisherDialog()
     {
-        editingPublisher = null;
-        publisherName = "";
-        publisherProviderId = "github";
-        publisherSettings = new Dictionary<string, string>();
-        showPublisherDialog = true;
-        _ = InitModalAsync("publisher-modal");
+        await ShowPublisherModalAsync(null);
     }
 
-    private void EditPublisher(SecretsPublisherConfig publisher)
+    private async Task EditPublisher(SecretsPublisherConfig publisher)
     {
-        editingPublisher = publisher;
-        publisherName = publisher.Name;
-        publisherProviderId = publisher.ProviderId;
-        publisherSettings = new Dictionary<string, string>(publisher.Settings);
-        showPublisherDialog = true;
-        _ = InitModalAsync("publisher-modal");
+        await ShowPublisherModalAsync(publisher);
     }
 
-    private void ClosePublisherDialog()
+    private async Task ShowPublisherModalAsync(SecretsPublisherConfig? publisher)
     {
-        showPublisherDialog = false;
-        _ = DisposeModalAsync("publisher-modal");
-        editingPublisher = null;
-    }
+        ModalParams.Clear();
+        if (publisher != null)
+            ModalParams.Set("Publisher", publisher);
 
-    private async Task SavePublisher()
-    {
-        var config = new SecretsPublisherConfig(
-            editingPublisher?.Id ?? Guid.NewGuid().ToString("N"),
-            publisherProviderId,
-            publisherName,
-            new Dictionary<string, string>(publisherSettings)
-        );
-        
-        await SecretsPublisherService.SavePublisherAsync(config);
-        await AlertService.ShowToastAsync($"Publisher '{publisherName}' saved");
-        ClosePublisherDialog();
-        await LoadSecretsPublishers();
+        var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+        if (nav == null) return;
+
+        var resultTask = ModalParams.WaitForResultAsync();
+        var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/publisher", 550, 550);
+        await nav.PushModalAsync(page, animated: true);
+        var result = await resultTask;
+        await nav.PopModalAsync(animated: true);
+
+        if (result is SecretsPublisherConfig saved)
+        {
+            await SecretsPublisherService.SavePublisherAsync(saved);
+            await AlertService.ShowToastAsync($"Publisher '{saved.Name}' saved");
+            await LoadSecretsPublishers();
+        }
     }
 
     private async Task DeletePublisher(SecretsPublisherConfig publisher)
@@ -2849,184 +1949,64 @@
         }
     }
 
-    // Backup & Restore methods
-    private async Task InitializeExportSelection()
-    {
-        exportIncludePreferences = true;
-        exportIncludeAppleIdentities = appleIdentities.Count > 0;
-        exportIncludeCloudProviders = cloudProviders.Count > 0;
-        exportIncludeSecretsPublishers = secretsPublishers.Count > 0;
-        exportIncludeGoogleIdentities = googleIdentities.Count > 0;
-        selectedExportAppleIdentityIds = appleIdentities.Select(identity => identity.Id).ToHashSet(StringComparer.Ordinal);
-        selectedExportCloudProviderIds = cloudProviders.Select(provider => provider.Id).ToHashSet(StringComparer.Ordinal);
-        selectedExportPublisherIds = secretsPublishers.Select(publisher => publisher.Id).ToHashSet(StringComparer.Ordinal);
-        selectedExportGoogleIdentityIds = googleIdentities.Select(identity => identity.Id).ToHashSet(StringComparer.Ordinal);
-        pushProjects = (await PushProjectService.GetProjectsAsync()).ToList();
-        exportIncludePushProjects = pushProjects.Count > 0;
-        selectedExportPushProjectIds = pushProjects.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
-    }
-
-    private void SetExportAppleIdentitySelection(string id, bool isSelected)
-    {
-        if (isSelected)
-            selectedExportAppleIdentityIds.Add(id);
-        else
-            selectedExportAppleIdentityIds.Remove(id);
-    }
-
-    private void SetExportCloudProviderSelection(string id, bool isSelected)
-    {
-        if (isSelected)
-            selectedExportCloudProviderIds.Add(id);
-        else
-            selectedExportCloudProviderIds.Remove(id);
-    }
-
-    private void SetExportPublisherSelection(string id, bool isSelected)
-    {
-        if (isSelected)
-            selectedExportPublisherIds.Add(id);
-        else
-            selectedExportPublisherIds.Remove(id);
-    }
-
-    private void SetExportGoogleIdentitySelection(string id, bool isSelected)
-    {
-        if (isSelected)
-            selectedExportGoogleIdentityIds.Add(id);
-        else
-            selectedExportGoogleIdentityIds.Remove(id);
-    }
-
-    private void SetExportPushProjectSelection(string id, bool isSelected)
-    {
-        if (isSelected)
-            selectedExportPushProjectIds.Add(id);
-        else
-            selectedExportPushProjectIds.Remove(id);
-    }
-
     private async Task ShowExportDialog()
     {
-        exportPassword = "";
-        exportPasswordConfirm = "";
-        exportError = "";
-        await InitializeExportSelection();
-        showExportDialog = true;
-        _ = InitModalAsync("export-settings-modal");
-    }
-
-    private void CloseExportDialog()
-    {
-        showExportDialog = false;
-        _ = DisposeModalAsync("export-settings-modal");
-        exportPassword = "";
-        exportPasswordConfirm = "";
-        exportError = "";
-    }
-
-    private void ShowImportDialog()
-    {
-        importFilePath = "";
-        importPassword = "";
-        importError = "";
-        showImportDialog = true;
-        _ = InitModalAsync("import-settings-modal");
-    }
-
-    private void CloseImportDialog()
-    {
-        showImportDialog = false;
-        _ = DisposeModalAsync("import-settings-modal");
-        importFilePath = "";
-        importPassword = "";
-        importError = "";
-    }
-
-    private async Task BrowseImportFile()
-    {
-        var path = await DialogService.PickOpenFileAsync("Select Backup File", new[] { "mss" });
-        if (!string.IsNullOrEmpty(path))
-        {
-            importFilePath = path;
-            StateHasChanged();
-        }
-    }
-
-    private async Task ExportSettings()
-    {
-        if (exportPassword != exportPasswordConfirm)
-        {
-            exportError = "Passwords do not match";
-            return;
-        }
-
-        if (exportPassword.Length < 8)
-        {
-            exportError = "Password must be at least 8 characters";
-            return;
-        }
-
-        if (!CanExportSelection)
-        {
-            exportError = "Select at least one item to export";
-            return;
-        }
-
         isExporting = true;
-        exportError = "";
         StateHasChanged();
 
         try
         {
-            var exportSelection = new BackupExportSelection
-            {
-                IncludePreferences = exportIncludePreferences,
-                AppleIdentityIds = exportIncludeAppleIdentities
-                    ? selectedExportAppleIdentityIds.ToList()
-                    : new List<string>(),
-                CloudProviderIds = exportIncludeCloudProviders
-                    ? selectedExportCloudProviderIds.ToList()
-                    : new List<string>(),
-                SecretsPublisherIds = exportIncludeSecretsPublishers
-                    ? selectedExportPublisherIds.ToList()
-                    : new List<string>(),
-                GoogleIdentityIds = exportIncludeGoogleIdentities
-                    ? selectedExportGoogleIdentityIds.ToList()
-                    : new List<string>(),
-                PushProjectIds = exportIncludePushProjects
-                    ? selectedExportPushProjectIds.ToList()
-                    : new List<string>()
-            };
-            var encrypted = await BackupService.ExportSettingsAsync(exportPassword, exportSelection);
-            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var suggestedName = $"maui-sherpa-backup-{timestamp}.mss";
+            ModalParams.Clear();
 
-            // Write encrypted data to temp file first, then let the picker move it.
-            // PickSaveFileAsync uses MoveToService which moves the temp file to the
-            // destination — writing after the move fails under the macOS sandbox.
-            var tempPath = Path.Combine(Path.GetTempPath(), suggestedName);
-            await File.WriteAllBytesAsync(tempPath, encrypted);
+            var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+            if (nav == null) return;
 
-            var savePath = await DialogService.PickSaveFileAsync("Save Backup", suggestedName, "mss");
-            if (!string.IsNullOrEmpty(savePath))
-            {
-                CloseExportDialog();
-                await AlertService.ShowToastAsync($"Settings exported to {savePath}");
-            }
-            else
-            {
-                // User cancelled — clean up temp file
-                try { File.Delete(tempPath); } catch { }
-            }
-        }
-        catch (Exception ex)
-        {
-            exportError = $"Export failed: {ex.Message}";
+            var resultTask = ModalParams.WaitForResultAsync();
+            var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/export-settings", 500, 600);
+            await nav.PushModalAsync(page, animated: true);
+            await resultTask;
+            await nav.PopModalAsync(animated: true);
         }
         finally
         {
             isExporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowImportDialog()
+    {
+        isImporting = true;
+        StateHasChanged();
+
+        try
+        {
+            ModalParams.Clear();
+
+            var nav = Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation;
+            if (nav == null) return;
+
+            var resultTask = ModalParams.WaitForResultAsync();
+            var page = new MauiSherpa.Pages.Forms.ProgressModalPage("/modal/import-settings", 500, 350);
+            await nav.PushModalAsync(page, animated: true);
+            var result = await resultTask;
+            await nav.PopModalAsync(animated: true);
+
+            if (result is BackupImportResult importResult)
+            {
+                await ApplyImportedBackupAsync(importResult);
+
+                await LoadAppleIdentities();
+                await LoadGoogleIdentities();
+                await LoadCloudProviders();
+                await LoadSecretsPublishers();
+
+                await AlertService.ShowToastAsync("Settings imported successfully!");
+            }
+        }
+        finally
+        {
+            isImporting = false;
             StateHasChanged();
         }
     }
@@ -3113,85 +2093,6 @@
         }
 
         await LoadGoogleIdentities();
-    }
-
-    private async Task ImportSettings()
-    {
-        if (string.IsNullOrEmpty(importFilePath) || !File.Exists(importFilePath))
-        {
-            importError = "Please select a valid backup file";
-            return;
-        }
-
-        isImporting = true;
-        importError = "";
-        StateHasChanged();
-
-        try
-        {
-            var encrypted = await File.ReadAllBytesAsync(importFilePath);
-            
-            if (!await BackupService.ValidateBackupAsync(encrypted))
-            {
-                importError = "Invalid backup file format";
-                isImporting = false;
-                StateHasChanged();
-                return;
-            }
-
-            var importResult = await BackupService.ImportBackupAsync(encrypted, importPassword);
-            await ApplyImportedBackupAsync(importResult);
-            
-            // Reload all data
-            await LoadAppleIdentities();
-            await LoadCloudProviders();
-            await LoadSecretsPublishers();
-            
-            await AlertService.ShowToastAsync("Settings imported successfully!");
-            CloseImportDialog();
-        }
-        catch (System.Security.Cryptography.CryptographicException)
-        {
-            importError = "Incorrect password";
-        }
-        catch (Exception ex)
-        {
-            importError = $"Import failed: {ex.Message}";
-        }
-        finally
-        {
-            isImporting = false;
-            StateHasChanged();
-        }
-    }
-
-    private DotNetObjectReference<Settings>? _dotNetRef;
-    private readonly HashSet<string> _activeModals = new();
-
-    private async Task InitModalAsync(string modalId)
-    {
-        await Task.Yield();
-        _dotNetRef ??= DotNetObjectReference.Create(this);
-        _activeModals.Add(modalId);
-        await JS.InvokeVoidAsync("modalInterop.initialize", modalId, _dotNetRef);
-    }
-
-    private async Task DisposeModalAsync(string modalId)
-    {
-        _activeModals.Remove(modalId);
-        try { await JS.InvokeVoidAsync("modalInterop.dispose", modalId); } catch { }
-    }
-
-    [JSInvokable]
-    public void OnEscapePressed()
-    {
-        if (showPublisherDialog) ClosePublisherDialog();
-        else if (showProviderDialog) CloseProviderDialog();
-        else if (showIdentityDialog) CloseIdentityDialog();
-        else if (showGoogleIdentityDialog) CloseGoogleIdentityDialog();
-        else if (showImportDialog) CloseImportDialog();
-        else if (showExportDialog) CloseExportDialog();
-        InvokeAsync(StateHasChanged);
     }
 
     // === Update Dialog ===

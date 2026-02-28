@@ -1,0 +1,182 @@
+@page "/modal/cloud-provider"
+@using MauiSherpa.Core.Interfaces
+@inject MauiSherpa.Pages.Forms.ModalParameterService ModalParams
+@inject ICloudSecretsProviderFactory CloudSecretsProviderFactory
+
+<div class="dialog-content">
+    <div class="dialog-header">
+        <h2><i class="fas fa-cloud"></i> @(isEditing ? "Edit" : "Add") Cloud Provider</h2>
+    </div>
+    <div class="dialog-body">
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" @bind="providerName" placeholder="My Team Vault" />
+            <div class="help-text">A friendly name to identify this provider</div>
+        </div>
+        <div class="form-group">
+            <label>Provider Type</label>
+            @if (isEditing)
+            {
+                <input type="text" value="@CloudSecretsProviderFactory.GetProviderDisplayName(providerType)" disabled />
+            }
+            else
+            {
+                <div class="provider-type-selector">
+                    @foreach (var type in CloudSecretsProviderFactory.SupportedProviders)
+                    {
+                        <div class="provider-type-card @(providerType == type ? "selected" : "")"
+                             @onclick="@(() => OnProviderTypeChanged(type))">
+                            <i class="@GetProviderIcon(type) provider-icon"></i>
+                            <span class="provider-name">@CloudSecretsProviderFactory.GetProviderDisplayName(type)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @foreach (var setting in CloudSecretsProviderFactory.GetProviderSettings(providerType))
+        {
+            <div class="form-group">
+                <label>@setting.DisplayName @(setting.IsRequired ? "*" : "")</label>
+                @if (setting.IsSecret)
+                {
+                    <input type="password"
+                           value="@(providerSettings.GetValueOrDefault(setting.Key, ""))"
+                           @onchange="@(e => providerSettings[setting.Key] = e.Value?.ToString() ?? "")"
+                           placeholder="@setting.Placeholder" />
+                }
+                else if (setting.Key == "CredentialsJson")
+                {
+                    <textarea rows="6"
+                              class="p8-textarea"
+                              @bind="@providerSettings[setting.Key]"
+                              placeholder="@setting.Placeholder"></textarea>
+                }
+                else
+                {
+                    <input type="text"
+                           value="@(providerSettings.GetValueOrDefault(setting.Key, setting.DefaultValue ?? ""))"
+                           @onchange="@(e => providerSettings[setting.Key] = e.Value?.ToString() ?? "")"
+                           placeholder="@setting.Placeholder" />
+                }
+                <div class="help-text">@setting.Description</div>
+            </div>
+        }
+    </div>
+    <div class="dialog-footer">
+        <button class="btn btn-secondary" @onclick="Cancel">
+            <i class="fas fa-times"></i> Cancel
+        </button>
+        <button class="btn btn-primary" @onclick="Save"
+                disabled="@(!CanSave)">
+            <i class="fas fa-save"></i> Save
+        </button>
+    </div>
+</div>
+
+@code {
+    private bool isEditing;
+    private string editingId = "";
+    private string providerName = "";
+    private CloudSecretsProviderType providerType = CloudSecretsProviderType.Infisical;
+    private Dictionary<string, string> providerSettings = new();
+
+    private bool CanSave
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(providerName)) return false;
+            var requiredSettings = CloudSecretsProviderFactory.GetProviderSettings(providerType).Where(s => s.IsRequired);
+            return requiredSettings.All(s => !string.IsNullOrWhiteSpace(providerSettings.GetValueOrDefault(s.Key)));
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        var provider = ModalParams.Get<CloudSecretsProviderConfig>("Provider");
+        if (provider != null)
+        {
+            isEditing = true;
+            editingId = provider.Id;
+            providerName = provider.Name;
+            providerType = provider.ProviderType;
+            providerSettings = new Dictionary<string, string>(provider.Settings);
+        }
+        else
+        {
+            providerType = CloudSecretsProviderFactory.SupportedProviders.FirstOrDefault();
+            InitializeDefaultSettings();
+        }
+    }
+
+    private void OnProviderTypeChanged(CloudSecretsProviderType type)
+    {
+        providerType = type;
+        providerSettings = new Dictionary<string, string>();
+        InitializeDefaultSettings();
+    }
+
+    private void InitializeDefaultSettings()
+    {
+        foreach (var setting in CloudSecretsProviderFactory.GetProviderSettings(providerType))
+        {
+            if (!string.IsNullOrEmpty(setting.DefaultValue))
+                providerSettings[setting.Key] = setting.DefaultValue;
+        }
+    }
+
+    private void Cancel() => ModalParams.Cancel();
+
+    private void Save()
+    {
+        var config = new CloudSecretsProviderConfig(
+            isEditing ? editingId : Guid.NewGuid().ToString("N"),
+            providerName,
+            providerType,
+            new Dictionary<string, string>(providerSettings));
+        ModalParams.Complete(config);
+    }
+
+    private static string GetProviderIcon(CloudSecretsProviderType type) => type switch
+    {
+        CloudSecretsProviderType.Infisical => "fas fa-shield-alt",
+        CloudSecretsProviderType.AzureKeyVault => "fas fa-key",
+        CloudSecretsProviderType.AwsSecretsManager => "fab fa-aws",
+        CloudSecretsProviderType.GoogleSecretManager => "fab fa-google",
+        CloudSecretsProviderType.OnePassword => "fas fa-lock",
+        _ => "fas fa-lock"
+    };
+}
+
+<style>
+    .dialog-content { display: flex; flex-direction: column; width: 100%; height: 100%; }
+    .dialog-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
+    .dialog-header h2 { margin: 0; font-size: 18px; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+    .dialog-body { padding: 24px; flex: 1; overflow-y: auto; }
+    .dialog-footer { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 12px; }
+
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-secondary); }
+    .form-group input { width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; box-sizing: border-box; background: var(--bg-tertiary); color: var(--text-primary); }
+    .form-group input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
+    .help-text { margin-top: 0.375rem; font-size: 0.75rem; color: var(--text-muted); }
+
+    .provider-type-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+    .provider-type-card { display: flex; flex-direction: column; align-items: center; padding: 1rem 0.75rem; border: 2px solid var(--border-color); border-radius: 0.5rem; cursor: pointer; transition: all 0.2s ease; background: var(--bg-tertiary); }
+    .provider-type-card:hover { border-color: var(--accent-primary); background: rgba(66, 153, 225, 0.05); }
+    .provider-type-card.selected { border-color: var(--accent-primary); background: rgba(66, 153, 225, 0.1); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15); }
+    .provider-type-card .provider-icon { font-size: 1.75rem; margin-bottom: 0.5rem; color: var(--text-secondary); }
+    .provider-type-card.selected .provider-icon { color: var(--accent-primary); }
+    .provider-type-card .provider-name { font-size: 0.8125rem; font-weight: 500; color: var(--text-primary); text-align: center; }
+
+    .p8-textarea { width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.8125rem; font-family: 'Monaco', 'Menlo', monospace; resize: vertical; min-height: 120px; background: var(--bg-tertiary); color: var(--text-primary); box-sizing: border-box; }
+    .p8-textarea:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
+
+    .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; }
+    .btn i { font-size: 12px; }
+    .btn-primary { background-color: var(--accent-primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background-color: var(--accent-primary-hover); }
+    .btn-secondary { background-color: var(--bg-hover); color: var(--text-secondary); }
+    .btn-secondary:hover:not(:disabled) { background-color: var(--bg-tertiary); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>

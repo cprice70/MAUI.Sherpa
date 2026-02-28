@@ -1,0 +1,316 @@
+@page "/modal/export-settings"
+@using MauiSherpa.Core.Interfaces
+@inject MauiSherpa.Pages.Forms.ModalParameterService ModalParams
+@inject IBackupService BackupService
+@inject IDialogService DialogService
+@inject IAlertService AlertService
+@inject IAppleIdentityService AppleIdentityService
+@inject IGoogleIdentityService GoogleIdentityService
+@inject ICloudSecretsService CloudSecretsService
+@inject ISecretsPublisherService SecretsPublisherService
+@inject IPushProjectService PushProjectService
+
+<div class="dialog-content">
+    <div class="dialog-header">
+        <h2><i class="fas fa-file-export"></i> Export Settings</h2>
+    </div>
+    <div class="dialog-body">
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" @bind="exportPassword" @bind:event="oninput" placeholder="Enter a secure password" />
+            <div class="help-text">This password will be required to import the backup</div>
+        </div>
+        <div class="form-group">
+            <label>Confirm Password</label>
+            <input type="password" @bind="exportPasswordConfirm" @bind:event="oninput" placeholder="Confirm password" />
+        </div>
+        <div class="form-group">
+            <label>Include in Backup</label>
+            <div class="backup-selection">
+                <label class="backup-selection-item">
+                    <input type="checkbox" @bind="exportIncludePreferences" />
+                    <span>General Settings</span>
+                </label>
+
+                <div class="backup-selection-group">
+                    <label class="backup-selection-item">
+                        <input type="checkbox" @bind="exportIncludeAppleIdentities" />
+                        <span>Apple Identities (@selectedAppleIds.Count/@appleIdentities.Count)</span>
+                    </label>
+                    @if (exportIncludeAppleIdentities && appleIdentities.Count > 0)
+                    {
+                        <div class="backup-selection-children">
+                            @foreach (var identity in appleIdentities)
+                            {
+                                <label class="backup-selection-item child">
+                                    <input type="checkbox"
+                                           checked="@selectedAppleIds.Contains(identity.Id)"
+                                           @onchange="e => ToggleSelection(selectedAppleIds, identity.Id, e.Value is bool c && c)" />
+                                    <span>@identity.Name</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="backup-selection-group">
+                    <label class="backup-selection-item">
+                        <input type="checkbox" @bind="exportIncludeCloudProviders" />
+                        <span>Cloud Secret Providers (@selectedProviderIds.Count/@cloudProviders.Count)</span>
+                    </label>
+                    @if (exportIncludeCloudProviders && cloudProviders.Count > 0)
+                    {
+                        <div class="backup-selection-children">
+                            @foreach (var provider in cloudProviders)
+                            {
+                                <label class="backup-selection-item child">
+                                    <input type="checkbox"
+                                           checked="@selectedProviderIds.Contains(provider.Id)"
+                                           @onchange="e => ToggleSelection(selectedProviderIds, provider.Id, e.Value is bool c && c)" />
+                                    <span>@provider.Name</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="backup-selection-group">
+                    <label class="backup-selection-item">
+                        <input type="checkbox" @bind="exportIncludeSecretsPublishers" />
+                        <span>CI/CD Publishers (@selectedPublisherIds.Count/@secretsPublishers.Count)</span>
+                    </label>
+                    @if (exportIncludeSecretsPublishers && secretsPublishers.Count > 0)
+                    {
+                        <div class="backup-selection-children">
+                            @foreach (var publisher in secretsPublishers)
+                            {
+                                <label class="backup-selection-item child">
+                                    <input type="checkbox"
+                                           checked="@selectedPublisherIds.Contains(publisher.Id)"
+                                           @onchange="e => ToggleSelection(selectedPublisherIds, publisher.Id, e.Value is bool c && c)" />
+                                    <span>@publisher.Name</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="backup-selection-group">
+                    <label class="backup-selection-item">
+                        <input type="checkbox" @bind="exportIncludeGoogleIdentities" />
+                        <span>Android Identities (@selectedGoogleIds.Count/@googleIdentities.Count)</span>
+                    </label>
+                    @if (exportIncludeGoogleIdentities && googleIdentities.Count > 0)
+                    {
+                        <div class="backup-selection-children">
+                            @foreach (var identity in googleIdentities)
+                            {
+                                <label class="backup-selection-item child">
+                                    <input type="checkbox"
+                                           checked="@selectedGoogleIds.Contains(identity.Id)"
+                                           @onchange="e => ToggleSelection(selectedGoogleIds, identity.Id, e.Value is bool c && c)" />
+                                    <span>@identity.Name</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="backup-selection-group">
+                    <label class="backup-selection-item">
+                        <input type="checkbox" @bind="exportIncludePushProjects" />
+                        <span>Push Projects (@selectedPushProjectIds.Count/@pushProjects.Count)</span>
+                    </label>
+                    @if (exportIncludePushProjects && pushProjects.Count > 0)
+                    {
+                        <div class="backup-selection-children">
+                            @foreach (var project in pushProjects)
+                            {
+                                <label class="backup-selection-item child">
+                                    <input type="checkbox"
+                                           checked="@selectedPushProjectIds.Contains(project.Id)"
+                                           @onchange="e => ToggleSelection(selectedPushProjectIds, project.Id, e.Value is bool c && c)" />
+                                    <span>@project.Name (@(project.Platform == PushProjectPlatform.Apns ? "APNs" : "FCM"))</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+            @if (!CanExportSelection)
+            {
+                <div class="help-text">Select at least one item to export.</div>
+            }
+        </div>
+        @if (!string.IsNullOrEmpty(exportError))
+        {
+            <div class="error-message">@exportError</div>
+        }
+    </div>
+    <div class="dialog-footer">
+        <button class="btn btn-secondary" @onclick="Cancel" disabled="@isExporting">Cancel</button>
+        <button class="btn btn-primary" @onclick="ExportSettings" disabled="@(!CanExport)">
+            <i class="fas @(isExporting ? "fa-spinner fa-spin" : "fa-download")"></i> @(isExporting ? "Exporting..." : "Export")
+        </button>
+    </div>
+</div>
+
+@code {
+    private List<AppleIdentity> appleIdentities = new();
+    private List<GoogleIdentity> googleIdentities = new();
+    private List<CloudSecretsProviderConfig> cloudProviders = new();
+    private List<SecretsPublisherConfig> secretsPublishers = new();
+    private List<PushProject> pushProjects = new();
+
+    private string exportPassword = "";
+    private string exportPasswordConfirm = "";
+    private string exportError = "";
+    private bool isExporting;
+    private bool exportIncludePreferences = true;
+    private bool exportIncludeAppleIdentities = true;
+    private bool exportIncludeCloudProviders = true;
+    private bool exportIncludeSecretsPublishers = true;
+    private bool exportIncludeGoogleIdentities = true;
+    private bool exportIncludePushProjects = true;
+
+    private HashSet<string> selectedAppleIds = new(StringComparer.Ordinal);
+    private HashSet<string> selectedProviderIds = new(StringComparer.Ordinal);
+    private HashSet<string> selectedPublisherIds = new(StringComparer.Ordinal);
+    private HashSet<string> selectedGoogleIds = new(StringComparer.Ordinal);
+    private HashSet<string> selectedPushProjectIds = new(StringComparer.Ordinal);
+
+    private bool CanExportSelection =>
+        exportIncludePreferences ||
+        (exportIncludeAppleIdentities && selectedAppleIds.Count > 0) ||
+        (exportIncludeCloudProviders && selectedProviderIds.Count > 0) ||
+        (exportIncludeSecretsPublishers && selectedPublisherIds.Count > 0) ||
+        (exportIncludeGoogleIdentities && selectedGoogleIds.Count > 0) ||
+        (exportIncludePushProjects && selectedPushProjectIds.Count > 0);
+
+    private bool CanExport =>
+        !isExporting &&
+        !string.IsNullOrEmpty(exportPassword) &&
+        exportPassword == exportPasswordConfirm &&
+        CanExportSelection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        appleIdentities = (await AppleIdentityService.GetIdentitiesAsync()).ToList();
+        googleIdentities = (await GoogleIdentityService.GetIdentitiesAsync()).ToList();
+        cloudProviders = (await CloudSecretsService.GetProvidersAsync()).ToList();
+        secretsPublishers = (await SecretsPublisherService.GetPublishersAsync()).ToList();
+        pushProjects = (await PushProjectService.GetProjectsAsync()).ToList();
+
+        exportIncludeAppleIdentities = appleIdentities.Count > 0;
+        exportIncludeCloudProviders = cloudProviders.Count > 0;
+        exportIncludeSecretsPublishers = secretsPublishers.Count > 0;
+        exportIncludeGoogleIdentities = googleIdentities.Count > 0;
+        exportIncludePushProjects = pushProjects.Count > 0;
+
+        selectedAppleIds = appleIdentities.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
+        selectedProviderIds = cloudProviders.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        selectedPublisherIds = secretsPublishers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        selectedGoogleIds = googleIdentities.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
+        selectedPushProjectIds = pushProjects.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private void Cancel() => ModalParams.Cancel();
+
+    private static void ToggleSelection(HashSet<string> set, string id, bool isSelected)
+    {
+        if (isSelected) set.Add(id); else set.Remove(id);
+    }
+
+    private async Task ExportSettings()
+    {
+        if (exportPassword != exportPasswordConfirm)
+        {
+            exportError = "Passwords do not match";
+            return;
+        }
+        if (exportPassword.Length < 8)
+        {
+            exportError = "Password must be at least 8 characters";
+            return;
+        }
+        if (!CanExportSelection)
+        {
+            exportError = "Select at least one item to export";
+            return;
+        }
+
+        isExporting = true;
+        exportError = "";
+        StateHasChanged();
+
+        try
+        {
+            var selection = new BackupExportSelection
+            {
+                IncludePreferences = exportIncludePreferences,
+                AppleIdentityIds = exportIncludeAppleIdentities ? selectedAppleIds.ToList() : new List<string>(),
+                CloudProviderIds = exportIncludeCloudProviders ? selectedProviderIds.ToList() : new List<string>(),
+                SecretsPublisherIds = exportIncludeSecretsPublishers ? selectedPublisherIds.ToList() : new List<string>(),
+                GoogleIdentityIds = exportIncludeGoogleIdentities ? selectedGoogleIds.ToList() : new List<string>(),
+                PushProjectIds = exportIncludePushProjects ? selectedPushProjectIds.ToList() : new List<string>()
+            };
+            var encrypted = await BackupService.ExportSettingsAsync(exportPassword, selection);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var suggestedName = $"maui-sherpa-backup-{timestamp}.mss";
+
+            var tempPath = Path.Combine(Path.GetTempPath(), suggestedName);
+            await File.WriteAllBytesAsync(tempPath, encrypted);
+
+            var savePath = await DialogService.PickSaveFileAsync("Save Backup", suggestedName, "mss");
+            if (!string.IsNullOrEmpty(savePath))
+            {
+                await AlertService.ShowToastAsync($"Settings exported to {savePath}");
+                ModalParams.Complete(true);
+            }
+            else
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            exportError = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            isExporting = false;
+            StateHasChanged();
+        }
+    }
+}
+
+<style>
+    .dialog-content { display: flex; flex-direction: column; width: 100%; height: 100%; }
+    .dialog-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
+    .dialog-header h2 { margin: 0; font-size: 18px; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+    .dialog-body { padding: 24px; flex: 1; overflow-y: auto; }
+    .dialog-footer { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 12px; }
+
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-secondary); }
+    .form-group input[type="password"] { width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; box-sizing: border-box; background: var(--bg-tertiary); color: var(--text-primary); }
+    .form-group input[type="password"]:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1); }
+    .help-text { margin-top: 0.375rem; font-size: 0.75rem; color: var(--text-muted); }
+
+    .backup-selection { display: flex; flex-direction: column; gap: 0.5rem; }
+    .backup-selection-group { display: flex; flex-direction: column; gap: 0.375rem; }
+    .backup-selection-children { margin-left: 1.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .backup-selection-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-primary); }
+    .backup-selection-item.child { font-size: 0.8125rem; color: var(--text-secondary); }
+    .backup-selection-item input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; }
+
+    .error-message { background: rgba(245, 101, 101, 0.1); border: 1px solid rgba(245, 101, 101, 0.3); color: #c53030; padding: 0.625rem 0.875rem; border-radius: 0.375rem; font-size: 0.8125rem; }
+
+    .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; }
+    .btn i { font-size: 12px; }
+    .btn-primary { background-color: var(--accent-primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background-color: var(--accent-primary-hover); }
+    .btn-secondary { background-color: var(--bg-hover); color: var(--text-secondary); }
+    .btn-secondary:hover:not(:disabled) { background-color: var(--bg-tertiary); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
