@@ -2,6 +2,7 @@
 @using MauiSherpa.Core.Services
 @using MauiSherpa.Services
 @using MauiSherpa.Pages.Forms
+@using Microsoft.Maui.Controls
 @inject OperationModalService ModalService
 @inject ICopilotContextService CopilotContext
 @inject IJSRuntime JS
@@ -449,17 +450,22 @@
         var lastError = errorLogs.LastOrDefault() ?? "Operation failed";
         var allLogs = string.Join("\n", ModalService.LogEntries.Select(e => $"[{e.Level}] {e.Message}"));
         
-        // Build context and open overlay
+        // Build context
         var context = CopilotContextService.BuildOperationFailureContext(
             ModalService.Title ?? "Unknown operation",
             lastError,
             allLogs.Length > 2000 ? allLogs.Substring(0, 2000) + "..." : allLogs
         );
         
-        CopilotContext.OpenWithContext(context);
-        
-        // Close the modal - use HandleClose which handles proper cleanup
+        // Close the modal FIRST, then open Copilot after the pop completes
         HandleClose();
+        
+        // Defer Copilot open to avoid racing PushModal vs PopModal
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(300);
+            Application.Current?.Dispatcher.Dispatch(() => CopilotContext.OpenWithContext(context));
+        });
     }
 
     private async Task CopyLog()

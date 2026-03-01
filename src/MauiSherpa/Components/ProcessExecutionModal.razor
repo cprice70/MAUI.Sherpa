@@ -2,6 +2,7 @@
 @using MauiSherpa.Core.Services
 @using MauiSherpa.Services
 @using MauiSherpa.Pages.Forms
+@using Microsoft.Maui.Controls
 @inject ProcessModalService ModalService
 @inject IProcessExecutionService ProcessService
 @inject ICopilotContextService CopilotContext
@@ -584,17 +585,22 @@
             catch { }
         }
         
-        // Build context and open overlay
+        // Build context
         var context = CopilotContextService.BuildProcessFailureContext(
             Request?.CommandLine ?? "Unknown command",
             Result?.ExitCode ?? -1,
             output
         );
         
-        CopilotContext.OpenWithContext(context);
-        
-        // Close the modal
+        // Close the modal FIRST, then open Copilot after the pop completes
         HandleClose();
+        
+        // Defer Copilot open to avoid racing PushModal vs PopModal
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(300);
+            Application.Current?.Dispatcher.Dispatch(() => CopilotContext.OpenWithContext(context));
+        });
     }
 
     private async Task CopyOutput()

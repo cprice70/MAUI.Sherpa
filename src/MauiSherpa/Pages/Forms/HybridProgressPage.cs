@@ -206,8 +206,10 @@ public class HybridProgressPage : ContentPage
                 // Reset styles
                 btn.FontAttributes = FontAttributes.None;
                 btn.BorderWidth = 0;
+                btn.ImageSource = null;
                 btn.ClearValue(Button.TextColorProperty);
                 btn.ClearValue(Button.BackgroundColorProperty);
+                btn.ClearValue(Button.BackgroundProperty);
 
                 switch (def.Style)
                 {
@@ -229,7 +231,8 @@ public class HybridProgressPage : ContentPage
                     case ProgressButtonStyle.Copilot:
                         btn.FontAttributes = FontAttributes.Bold;
                         btn.TextColor = Colors.White;
-                        btn.BackgroundColor = Color.FromArgb("#7c3aed");
+                        // NSButton on macOS doesn't render LinearGradientBrush — use solid indigo
+                        btn.BackgroundColor = Color.FromArgb("#4f46e5");
                         break;
                     default: // Secondary
                         btn.BackgroundColor = Colors.Transparent;

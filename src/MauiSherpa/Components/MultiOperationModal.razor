@@ -2,6 +2,7 @@
 @using MauiSherpa.Core.Services
 @using MauiSherpa.Services
 @using MauiSherpa.Pages.Forms
+@using Microsoft.Maui.Controls
 @inject MultiOperationModalService ModalService
 @inject ICopilotContextService CopilotContext
 @inject IJSRuntime JS
@@ -562,10 +563,15 @@
             details.ToString()
         );
         
-        CopilotContext.OpenWithContext(context);
+        // Close the modal FIRST, then open Copilot after the pop completes
+        HandleClose();
         
-        // Close the modal
-        ModalService.Close();
+        // Defer Copilot open to avoid racing PushModal vs PopModal
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(300);
+            Application.Current?.Dispatcher.Dispatch(() => CopilotContext.OpenWithContext(context));
+        });
     }
 
     private string GetOperationCardClass(OperationItemStatus op) => op.State switch

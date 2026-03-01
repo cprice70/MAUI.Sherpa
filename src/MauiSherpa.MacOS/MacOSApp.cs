@@ -25,6 +25,23 @@ class MacOSApp : Application
         _preferences = serviceProvider.GetRequiredService<IPreferences>();
         MauiSherpa.Pages.Forms.FormTheme.Register(this);
 
+        // Global exception handlers to log crashes
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            var logService = serviceProvider.GetService<ILoggingService>();
+            logService?.LogError($"UNHANDLED EXCEPTION: {e.ExceptionObject}");
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            var logService = serviceProvider.GetService<ILoggingService>();
+            logService?.LogError($"UNOBSERVED TASK EXCEPTION: {e.Exception}");
+        };
+        ObjCRuntime.Runtime.MarshalManagedException += (_, e) =>
+        {
+            var logService = serviceProvider.GetService<ILoggingService>();
+            logService?.LogError($"MARSHAL MANAGED EXCEPTION: {e.Exception}");
+        };
+
         var toolbarService = serviceProvider.GetRequiredService<IToolbarService>();
         toolbarService.RouteChanged += OnBlazorRouteChanged;
 
