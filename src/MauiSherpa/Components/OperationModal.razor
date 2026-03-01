@@ -102,7 +102,7 @@
     .progress-bar-container {
         height: 0.5rem;
         background: #e2e8f0;
-        border-radius: 0.25rem;
+        border-radius: 0.5rem;
         overflow: hidden;
         position: relative;
     }
@@ -110,7 +110,7 @@
     .progress-bar {
         height: 100%;
         background: linear-gradient(90deg, #4299e1, #667eea);
-        border-radius: 0.25rem;
+        border-radius: 0.5rem;
         transition: width 0.3s ease;
     }
 
@@ -151,25 +151,22 @@
         align-items: center;
         gap: 0.625rem;
         padding: 0.875rem 1rem;
-        border-radius: 0.5rem;
+        border-radius: var(--card-radius, 1rem);
         font-weight: 600;
     }
 
     .result-status.success {
         background: #f0fff4;
-        border: 1px solid #68d391;
         color: #276749;
     }
 
     .result-status.error {
         background: #fff5f5;
-        border: 1px solid #fc8181;
         color: #c53030;
     }
 
     .result-status.cancelled {
         background: #fffbeb;
-        border: 1px solid #f6e05e;
         color: #975a16;
     }
 
@@ -192,9 +189,9 @@
         max-height: 250px;
         display: flex;
         flex-direction: column;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.5rem;
+        border-radius: var(--card-radius, 1rem);
         overflow: hidden;
+        background: var(--bg-secondary, #f7fafc);
     }
 
     .log-header {
@@ -275,11 +272,11 @@
 
     /* Dark mode overrides */
     .theme-dark .status-text { color: var(--text-primary, #e2e8f0); }
-    .theme-dark .result-status.success { background: rgba(72, 187, 120, 0.15); border-color: #38a169; color: #9ae6b4; }
-    .theme-dark .result-status.error { background: rgba(245, 101, 101, 0.15); border-color: #fc8181; color: #feb2b2; }
-    .theme-dark .result-status.cancelled { background: rgba(237, 137, 54, 0.15); border-color: #ed8936; color: #fbd38d; }
+    .theme-dark .result-status.success { background: rgba(72, 187, 120, 0.15); color: #9ae6b4; }
+    .theme-dark .result-status.error { background: rgba(245, 101, 101, 0.15); color: #feb2b2; }
+    .theme-dark .result-status.cancelled { background: rgba(237, 137, 54, 0.15); color: #fbd38d; }
     .theme-dark .result-details { color: #a0aec0; }
-    .theme-dark .log-section { border-color: var(--border-color, #4a5568); }
+    .theme-dark .log-section { background: var(--bg-tertiary, #374151); }
     .theme-dark .log-header { background: var(--bg-tertiary, #374151); border-bottom-color: var(--border-color, #4a5568); color: var(--text-secondary, #a0aec0); }
 </style>
 
