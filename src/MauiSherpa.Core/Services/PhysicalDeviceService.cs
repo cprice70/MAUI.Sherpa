@@ -38,6 +38,9 @@ public class PhysicalDeviceService : IPhysicalDeviceService
                 using var process = Process.Start(psi);
                 if (process == null) return [];
 
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+                await Task.WhenAll(stdoutTask, stderrTask);
                 await process.WaitForExitAsync();
 
                 if (!File.Exists(tempFile))
@@ -150,42 +153,46 @@ public class PhysicalDeviceService : IPhysicalDeviceService
     public async Task<IReadOnlyList<PhysicalDeviceApp>> GetInstalledAppsAsync(string identifier)
     {
         if (!IsSupported) return [];
+
+        var tempFile = Path.GetTempFileName();
         try
         {
-            var tempFile = Path.GetTempFileName();
-            try
+            var psi = new ProcessStartInfo
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "xcrun",
-                    Arguments = $"devicectl device info apps --device {identifier} --json-output \"{tempFile}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
+                FileName = "xcrun",
+                Arguments = $"devicectl device info apps --device {identifier} --json-output \"{tempFile}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                using var process = Process.Start(psi);
-                if (process == null) return [];
+            using var process = Process.Start(psi);
+            if (process == null)
+                throw new InvalidOperationException("Failed to start devicectl");
 
-                await process.WaitForExitAsync();
+            // Read stdout/stderr concurrently to avoid deadlock
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
+            await process.WaitForExitAsync();
 
-                if (!File.Exists(tempFile))
-                    return [];
+            if (!File.Exists(tempFile))
+                throw new InvalidOperationException("devicectl did not produce output");
 
-                var json = await File.ReadAllTextAsync(tempFile);
-                return ParseApps(json);
-            }
-            finally
-            {
-                if (File.Exists(tempFile))
-                    File.Delete(tempFile);
-            }
+            var json = await File.ReadAllTextAsync(tempFile);
+
+            // Check for error response
+            var errorMsg = ExtractError(json);
+            if (errorMsg != null)
+                throw new InvalidOperationException(errorMsg);
+
+            return ParseApps(json);
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError($"Failed to list apps on device {identifier}: {ex.Message}", ex);
-            return [];
+            if (File.Exists(tempFile))
+                File.Delete(tempFile);
         }
     }
 
@@ -214,8 +221,9 @@ public class PhysicalDeviceService : IPhysicalDeviceService
                 return null;
             }
 
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
             await process.WaitForExitAsync();
 
             if (process.ExitCode == 0)
@@ -224,8 +232,7 @@ public class PhysicalDeviceService : IPhysicalDeviceService
                 return outputDir;
             }
 
-            progress?.Report($"Failed: {error}");
-            _logger.LogError($"Failed to download container: {error}");
+            progress?.Report($"Failed: {stderrTask.Result}");
             return null;
         }
         catch (Exception ex)
@@ -236,35 +243,117 @@ public class PhysicalDeviceService : IPhysicalDeviceService
         }
     }
 
-    private IReadOnlyList<PhysicalDeviceApp> ParseApps(string json)
+    public async Task<bool> UninstallAppAsync(string identifier, string bundleId, IProgress<string>? progress = null)
     {
-        var apps = new List<PhysicalDeviceApp>();
+        if (!IsSupported) return false;
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("result", out var result) ||
-                !result.TryGetProperty("apps", out var appsArray))
-                return apps;
-
-            foreach (var app in appsArray.EnumerateArray())
+            progress?.Report($"Uninstalling {bundleId}...");
+            var psi = new ProcessStartInfo
             {
-                var bundleId = GetStr(app, "bundleIdentifier") ?? "";
-                var name = GetStr(app, "name") ?? GetStr(app, "bundleIdentifier") ?? "Unknown";
-                var version = GetStr(app, "bundleVersion") ?? GetStr(app, "bundleShortVersion");
-                var appType = GetStr(app, "applicationType") ?? "User";
+                FileName = "xcrun",
+                Arguments = $"devicectl device uninstall app --device {identifier} {bundleId}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                if (!string.IsNullOrEmpty(bundleId))
-                    apps.Add(new PhysicalDeviceApp(bundleId, name, version, appType));
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                progress?.Report("Failed to start devicectl");
+                return false;
+            }
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                progress?.Report("App uninstalled successfully");
+                return true;
+            }
+
+            progress?.Report($"Failed: {error}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to uninstall app: {ex.Message}", ex);
+            progress?.Report($"Failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task<bool> TerminateAppAsync(string identifier, string bundleId)
+    {
+        if (!IsSupported) return false;
+        try
+        {
+            // First find the PID by listing processes
+            var tempFile = Path.GetTempFileName();
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "xcrun",
+                    Arguments = $"devicectl device info processes --device {identifier} --json-output \"{tempFile}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = Process.Start(psi);
+                if (process == null) return false;
+
+                var stdoutTask1 = process.StandardOutput.ReadToEndAsync();
+                var stderrTask1 = process.StandardError.ReadToEndAsync();
+                await Task.WhenAll(stdoutTask1, stderrTask1);
+                await process.WaitForExitAsync();
+                if (!File.Exists(tempFile)) return false;
+
+                var json = await File.ReadAllTextAsync(tempFile);
+                var pid = FindPidForBundle(json, bundleId);
+                if (pid == null)
+                {
+                    _logger.LogWarning($"No running process found for {bundleId}");
+                    return false;
+                }
+
+                // Now terminate the process
+                var termPsi = new ProcessStartInfo
+                {
+                    FileName = "xcrun",
+                    Arguments = $"devicectl device process terminate --device {identifier} --pid {pid}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var termProcess = Process.Start(termPsi);
+                if (termProcess == null) return false;
+
+                var stdoutTask2 = termProcess.StandardOutput.ReadToEndAsync();
+                var stderrTask2 = termProcess.StandardError.ReadToEndAsync();
+                await Task.WhenAll(stdoutTask2, stderrTask2);
+                await termProcess.WaitForExitAsync();
+                return termProcess.ExitCode == 0;
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Failed to parse device apps output: {ex.Message}", ex);
+            _logger.LogError($"Failed to terminate {bundleId}: {ex.Message}", ex);
+            return false;
         }
-
-        return apps;
     }
 
     private IReadOnlyList<PhysicalDevice> ParseDevices(string json)
@@ -313,11 +402,247 @@ public class PhysicalDeviceService : IPhysicalDeviceService
         return devices;
     }
 
+    /// <summary>
+    /// Extracts a user-friendly error message from devicectl JSON error responses.
+    /// Returns null if no error is present.
+    /// </summary>
+    private static string? ExtractError(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("error", out var error))
+                return null;
+
+            // Check for common error conditions
+            if (error.TryGetProperty("userInfo", out var userInfo) &&
+                userInfo.TryGetProperty("NSLocalizedDescription", out var desc))
+            {
+                var message = desc.TryGetProperty("string", out var str) ? str.GetString() : desc.GetString();
+
+                // Look for underlying cause (e.g. "device is locked")
+                if (userInfo.TryGetProperty("NSUnderlyingError", out var underlying))
+                {
+                    var innerMsg = ExtractNestedErrorMessage(underlying);
+                    if (innerMsg != null && innerMsg.Contains("locked", StringComparison.OrdinalIgnoreCase))
+                        return "Device is locked. Unlock your device and try again.";
+                    if (innerMsg != null)
+                        return $"{message} ({innerMsg})";
+                }
+
+                return message ?? "Unknown device error";
+            }
+
+            if (error.TryGetProperty("code", out var code))
+                return $"Device error (code {code.GetInt32()})";
+
+            return "Unknown device error";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ExtractNestedErrorMessage(JsonElement element)
+    {
+        if (element.TryGetProperty("error", out var inner))
+            element = inner;
+
+        if (element.TryGetProperty("userInfo", out var ui) &&
+            ui.TryGetProperty("NSLocalizedDescription", out var desc))
+        {
+            var msg = desc.TryGetProperty("string", out var str) ? str.GetString() : desc.GetString();
+            if (msg != null) return msg;
+        }
+
+        // Check nested underlying errors recursively
+        if (element.TryGetProperty("userInfo", out var ui2) &&
+            ui2.TryGetProperty("NSUnderlyingError", out var nested))
+            return ExtractNestedErrorMessage(nested);
+
+        return null;
+    }
+
     private static string? GetStr(JsonElement element, string property)
     {
         if (element.ValueKind == JsonValueKind.Undefined) return null;
         return element.TryGetProperty(property, out var prop) && prop.ValueKind == JsonValueKind.String
             ? prop.GetString()
             : null;
+    }
+
+    private IReadOnlyList<PhysicalDeviceApp> ParseApps(string json)
+    {
+        var apps = new List<PhysicalDeviceApp>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("result", out var result) ||
+                !result.TryGetProperty("apps", out var appsArray))
+                return apps;
+
+            foreach (var app in appsArray.EnumerateArray())
+            {
+                var bundleId = GetStr(app, "bundleIdentifier") ?? "";
+                if (string.IsNullOrEmpty(bundleId)) continue;
+
+                var name = GetStr(app, "name");
+                var version = GetStr(app, "bundleVersion");
+                var appType = GetStr(app, "appType") ?? "User";
+                var isRemovable = app.TryGetProperty("isRemovable", out var rem) && rem.GetBoolean();
+
+                // Normalize type
+                var isSystem = appType.Contains("System", StringComparison.OrdinalIgnoreCase) ||
+                               appType.Contains("Hidden", StringComparison.OrdinalIgnoreCase);
+
+                apps.Add(new PhysicalDeviceApp(
+                    bundleId,
+                    name,
+                    version,
+                    isSystem ? "System" : "User",
+                    isRemovable
+                ));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to parse apps: {ex.Message}", ex);
+        }
+
+        return apps.OrderBy(a => a.AppType == "System").ThenBy(a => a.BundleId).ToList();
+    }
+
+    private static int? FindPidForBundle(string json, string bundleId)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("result", out var result) ||
+                !result.TryGetProperty("runningProcesses", out var procs))
+                return null;
+
+            foreach (var proc in procs.EnumerateArray())
+            {
+                var execPath = proc.TryGetProperty("executable", out var exe)
+                    ? exe.GetString() : null;
+                var bid = proc.TryGetProperty("bundleIdentifier", out var b)
+                    ? b.GetString() : null;
+
+                if (string.Equals(bid, bundleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (proc.TryGetProperty("processIdentifier", out var pidProp))
+                        return pidProp.GetInt32();
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public async Task<string?> TakeScreenshotAsync(string udid, string outputPath)
+    {
+        if (!IsSupported) return null;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "idevicescreenshot",
+                Arguments = $"-u {udid} \"{outputPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return null;
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0 && File.Exists(outputPath))
+                return outputPath;
+
+            _logger.LogError($"Screenshot failed: {stderrTask.Result}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Screenshot failed: {ex.Message}", ex);
+            return null;
+        }
+    }
+
+    public async Task<bool> SetLocationAsync(string udid, double latitude, double longitude)
+    {
+        if (!IsSupported) return false;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "idevicesetlocation",
+                Arguments = $"-u {udid} -- {latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)} {longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return false;
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
+            await process.WaitForExitAsync();
+
+            return process.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Set location failed: {ex.Message}", ex);
+            return false;
+        }
+    }
+
+    public async Task<bool> ResetLocationAsync(string udid)
+    {
+        if (!IsSupported) return false;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "idevicesetlocation",
+                Arguments = $"-u {udid} reset",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return false;
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
+            await process.WaitForExitAsync();
+
+            return process.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Reset location failed: {ex.Message}", ex);
+            return false;
+        }
     }
 }

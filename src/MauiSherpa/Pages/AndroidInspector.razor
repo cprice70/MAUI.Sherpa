@@ -223,7 +223,13 @@
 
     private void OnServiceStateChanged()
     {
-        InvokeAsync(StateHasChanged);
+        InvokeAsync(() =>
+        {
+            // Sync local tab state from service (e.g. when Apps tab requests Files)
+            if (InspectorService.ActiveTab != ActiveTab)
+                ActiveTab = InspectorService.ActiveTab;
+            StateHasChanged();
+        });
     }
 
     private static InspectorTab ParseTab(string? tabName) => tabName?.ToLowerInvariant() switch

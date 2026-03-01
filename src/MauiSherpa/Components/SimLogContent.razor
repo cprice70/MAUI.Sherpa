@@ -1,7 +1,7 @@
 @using MauiSherpa.Core.Interfaces
 @using MauiSherpa.Core.Services
 @using MauiSherpa.Services
-@inject ISimulatorLogService LogService
+@inject ISimulatorLogService InjectedLogService
 @inject SimInspectorService PanelService
 @inject IAlertService AlertService
 @inject ILoggingService Logger
@@ -308,6 +308,13 @@
 
 @code {
     [Parameter] public string Udid { get; set; } = "";
+    /// <summary>
+    /// Optional override for the log service. When null, uses the injected ISimulatorLogService.
+    /// Pass IPhysicalDeviceLogService for physical device log streaming.
+    /// </summary>
+    [Parameter] public ISimulatorLogService? LogServiceOverride { get; set; }
+
+    private ISimulatorLogService LogService => LogServiceOverride ?? InjectedLogService;
 
     private ElementReference gridBody;
 

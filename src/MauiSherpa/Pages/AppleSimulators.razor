@@ -69,7 +69,10 @@ else
                     </div>
                 </div>
                 <div class="simulator-actions">
-                    <button class="btn btn-info btn-icon" @onclick="@(() => SimInspector.Open(device.Identifier, device.Name, isSimulator: false, tab: SimInspectorTab.Apps))" title="Apps">
+                    <button class="btn btn-info btn-icon" @onclick="@(() => SimInspector.Open(device.Identifier, device.Name, SimInspectorTab.Logs, isPhysicalDevice: true))" title="Logs">
+                        <i class="fas fa-scroll"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-icon" @onclick="@(() => SimInspector.Open(device.Identifier, device.Name, SimInspectorTab.Apps, isPhysicalDevice: true))" title="Apps">
                         <i class="fas fa-th-large"></i>
                     </button>
                     <button class="btn btn-secondary btn-icon" @onclick="@(() => InstallAppOnDevice(device))" title="Install App">

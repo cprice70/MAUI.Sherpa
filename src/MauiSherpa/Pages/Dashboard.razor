@@ -83,7 +83,7 @@
                     <div class="device-card-name">@device.Name</div>
                     <div class="device-card-detail">@device.ModelName — @FriendlyPlatform(device.Platform) @device.OsVersion</div>
                 </div>
-                <button class="device-card-action" @onclick='() => SimInspector.Open(device.Identifier, device.Name, isSimulator: false)' title="Inspect">
+                <button class="device-card-action" @onclick='() => SimInspector.Open(device.Identifier, device.Name, SimInspectorTab.Apps, isPhysicalDevice: true)' title="Inspect">
                     <i class="fas fa-search"></i>
                 </button>
             </div>
@@ -183,7 +183,8 @@
         gap: 0.625rem;
         padding: 0.75rem 1.25rem;
         background: var(--card-bg);
-        border-radius: var(--card-radius);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
         text-decoration: none;
         color: var(--text-primary);
         font-size: inherit;
@@ -206,7 +207,7 @@
 
     /* Connected Devices */
     .devices-section {
-        margin-bottom: 1.25rem;
+        margin-bottom: 2rem;
     }
 
     .devices-section h2 {
@@ -236,7 +237,8 @@
         gap: 0.75rem;
         padding: 0.75rem 1rem;
         background: var(--card-bg);
-        border-radius: var(--card-radius);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
         transition: border-color 0.15s;
     }
 
@@ -324,8 +326,8 @@
         padding: 1.25rem;
         color: var(--text-muted);
         font-size: 0.875rem;
-        background: var(--card-bg);
-        border-radius: var(--card-radius);
+        background: var(--bg-tertiary);
+        border-radius: 0.5rem;
     }
 
     .devices-empty i {
@@ -351,7 +353,8 @@
 
     .release-card {
         background: var(--card-bg);
-        border-radius: var(--card-radius);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
         margin-bottom: 0.5rem;
         overflow: hidden;
     }

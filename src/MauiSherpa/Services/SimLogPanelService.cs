@@ -7,7 +7,7 @@ public class SimInspectorService
     public bool IsOpen { get; set; }
     public string? ActiveUdid { get; set; }
     public string? ActiveSimName { get; set; }
-    public bool IsSimulator { get; set; } = true;
+    public bool IsPhysicalDevice { get; set; }
     public SimInspectorTab ActiveTab { get; set; } = SimInspectorTab.Logs;
 
     private Window? _window;
@@ -15,23 +15,19 @@ public class SimInspectorService
     public event Action? StateChanged;
     public event Action<string>? DeviceChanged;
 
-    public void Open(string udid, string? simName = null, SimInspectorTab tab = SimInspectorTab.Logs)
-        => Open(udid, simName, isSimulator: true, tab);
-
-    public void Open(string udid, string? deviceName, bool isSimulator, SimInspectorTab tab = SimInspectorTab.Logs)
+    public void Open(string udid, string? simName = null, SimInspectorTab tab = SimInspectorTab.Logs, bool isPhysicalDevice = false)
     {
         ActiveUdid = udid;
-        ActiveSimName = deviceName ?? udid;
-        IsSimulator = isSimulator;
+        ActiveSimName = simName ?? udid;
         ActiveTab = tab;
         IsOpen = true;
+        IsPhysicalDevice = isPhysicalDevice;
 
         if (_window != null)
         {
             // Window already open — switch device if needed
             if (ActiveUdid != udid)
                 DeviceChanged?.Invoke(udid);
-            _window.Title = BuildTitle(deviceName ?? udid, isSimulator);
             StateChanged?.Invoke();
             _window.Activated += OnWindowActivated;
             Application.Current?.ActivateWindow(_window);
@@ -39,7 +35,8 @@ public class SimInspectorService
         }
 
         var tabName = tab.ToString().ToLowerInvariant();
-        var title = BuildTitle(deviceName ?? udid, isSimulator);
+        var titlePrefix = isPhysicalDevice ? "Device Inspector" : "Simulator Inspector";
+        var title = $"{titlePrefix} — {simName ?? udid}";
         var page = new InspectorPage($"/inspector/apple/{Uri.EscapeDataString(udid)}/{tabName}", title);
         _window = new Window(page)
         {
@@ -58,15 +55,13 @@ public class SimInspectorService
             _window.Activated -= OnWindowActivated;
     }
 
-    public void SwitchDevice(string udid, string? deviceName = null, bool? isSimulator = null)
+    public void SwitchDevice(string udid, string? simName = null)
     {
         if (ActiveUdid == udid) return;
         ActiveUdid = udid;
-        ActiveSimName = deviceName ?? udid;
-        if (isSimulator.HasValue)
-            IsSimulator = isSimulator.Value;
+        ActiveSimName = simName ?? udid;
         if (_window != null)
-            _window.Title = BuildTitle(ActiveSimName, IsSimulator);
+            _window.Title = $"Simulator Inspector — {ActiveSimName}";
         StateChanged?.Invoke();
         DeviceChanged?.Invoke(udid);
     }
@@ -100,9 +95,4 @@ public class SimInspectorService
         ActiveSimName = null;
         StateChanged?.Invoke();
     }
-
-    private static string BuildTitle(string deviceName, bool isSimulator)
-        => isSimulator
-            ? $"Simulator Inspector — {deviceName}"
-            : $"Apple Inspector — {deviceName}";
 }

@@ -107,7 +107,7 @@
         {
             @foreach (var app in FilteredPhysicalApps)
             {
-                var isUserApp = !app.ApplicationType.Contains("System", StringComparison.OrdinalIgnoreCase);
+                var isUserApp = !app.AppType.Contains("System", StringComparison.OrdinalIgnoreCase);
                 <div class="sim-app-row @(isUserApp ? "user-app" : "")">
                     <div class="sim-app-icon">
                         <i class="fas @(isUserApp ? "fa-cube" : "fa-mobile-screen")"></i>
@@ -126,7 +126,7 @@
                         }
                     </div>
                     <div class="sim-app-type-badge">
-                        <span class="badge @(isUserApp ? "badge-user" : "badge-system")">@app.ApplicationType</span>
+                        <span class="badge @(isUserApp ? "badge-user" : "badge-system")">@app.AppType</span>
                     </div>
                     <div class="sim-app-actions">
                         <button class="btn btn-sm btn-secondary" @onclick="@(() => LaunchPhysicalApp(app))" title="Launch">
@@ -262,11 +262,11 @@
 
     private IEnumerable<PhysicalDeviceApp> FilteredPhysicalApps => physicalApps
         .Where(a => string.IsNullOrEmpty(searchQuery) ||
-                    a.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    (a.Name?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) == true) ||
                     a.BundleId.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
         .Where(a => string.IsNullOrEmpty(filterType) ||
-                    (filterType == "User" && !a.ApplicationType.Contains("System", StringComparison.OrdinalIgnoreCase)) ||
-                    (filterType == "System" && a.ApplicationType.Contains("System", StringComparison.OrdinalIgnoreCase)));
+                    (filterType == "User" && !a.AppType.Contains("System", StringComparison.OrdinalIgnoreCase)) ||
+                    (filterType == "System" && a.AppType.Contains("System", StringComparison.OrdinalIgnoreCase)));
 
     protected override async Task OnInitializedAsync()
     {
