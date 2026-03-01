@@ -134,10 +134,7 @@ public class SettingsPage : ContentPage
             HeightRequest = 30,
         };
         cancelButton.SetDynamicResource(Button.TextColorProperty, FormTheme.AccentPrimary);
-        cancelButton.Clicked += (_, _) =>
-        {
-            _bridge.RequestCancel();
-        };
+        cancelButton.Clicked += (_, _) => Complete(false);
 
         var saveButton = new Button
         {
