@@ -3,6 +3,9 @@ using MauiSherpa.Pages.Forms;
 #if MACOSAPP
 using Microsoft.Maui.Platform.MacOS;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Modals;
 
@@ -19,6 +22,10 @@ public class ImportSettingsPage : HybridFormPage<BackupImportResult>
         MacOSPage.SetModalSheetSizesToContent(this, false);
         MacOSPage.SetModalSheetWidth(this, 500);
         MacOSPage.SetModalSheetHeight(this, 350);
+#elif LINUXGTK
+        GtkPage.SetModalSizesToContent(this, false);
+        GtkPage.SetModalWidth(this, 500);
+        GtkPage.SetModalHeight(this, 350);
 #endif
     }
 }

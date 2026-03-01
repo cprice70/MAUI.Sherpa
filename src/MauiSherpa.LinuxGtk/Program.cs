@@ -30,9 +30,12 @@ public class Program : GtkMauiApplication
         var appleIdentityState = Services.GetService<IAppleIdentityStateService>();
         var googleIdentityService = Services.GetService<IGoogleIdentityService>();
         var googleIdentityState = Services.GetService<IGoogleIdentityStateService>();
+        var formModalService = Services.GetService<IFormModalService>();
+        var bridgeHolder = Services.GetService<MauiSherpa.Pages.Forms.HybridFormBridgeHolder>();
         if (toolbarService != null && copilotContext != null && themeForToolbar != null
             && appleIdentityService != null && appleIdentityState != null
-            && googleIdentityService != null && googleIdentityState != null)
+            && googleIdentityService != null && googleIdentityState != null
+            && formModalService != null && bridgeHolder != null)
         {
             var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault();
             var gtkWindow = (mauiWindow as Window)?.Handler?.PlatformView as Gtk.Window;
@@ -41,7 +44,8 @@ public class Program : GtkMauiApplication
                 _toolbarManager = new LinuxToolbarManager(
                     toolbarService, copilotContext, themeForToolbar,
                     appleIdentityService, appleIdentityState,
-                    googleIdentityService, googleIdentityState);
+                    googleIdentityService, googleIdentityState,
+                    formModalService, bridgeHolder);
                 _toolbarManager.AttachToWindow(gtkWindow);
             }
         }

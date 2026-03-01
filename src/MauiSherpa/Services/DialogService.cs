@@ -136,6 +136,21 @@ public class DialogService : IDialogService
             var folder = await folderPicker.PickSingleFolderAsync();
             return folder?.Path;
         });
+#elif LINUXGTK
+        return await Dispatcher.DispatchAsync(async () =>
+        {
+            var dialog = Gtk.FileDialog.New();
+            dialog.SetTitle(title);
+            dialog.SetModal(true);
+            var window = GetActiveGtkWindow();
+            if (window is null) return null;
+            try
+            {
+                var folder = await dialog.SelectFolderAsync(window);
+                return folder?.GetPath();
+            }
+            catch { return null; }
+        });
 #else
         return await Task.FromResult<string?>(null);
 #endif
@@ -196,13 +211,29 @@ public class DialogService : IDialogService
         });
 
         return await tcs.Task;
+#elif LINUXGTK
+        if (_filePicker == null) return null;
+        try
+        {
+            // Don't pass FileTypes — MAUI's FilePickerFileType.Value doesn't support Linux platform.
+            // The GTK file dialog will show all files; user can still filter visually.
+            var result = await Dispatcher.DispatchAsync(async () =>
+                await _filePicker.PickAsync(new PickOptions { PickerTitle = title })
+            );
+            return result?.FullPath;
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"[FilePicker] Exception: {ex}");
+            return null;
+        }
 #else
         try
         {
             var fileTypes = new Dictionary<DevicePlatform, IEnumerable<string>>();
             if (extensions != null && extensions.Length > 0)
             {
-                var dotExtensions = extensions.Select(e => "." + e.TrimStart('.'));
+                var dotExtensions = extensions.Select(e => "." + e.TrimStart('.')).ToArray();
                 fileTypes[DevicePlatform.WinUI] = dotExtensions;
                 fileTypes[DevicePlatform.macOS] = dotExtensions;
             }
@@ -309,6 +340,28 @@ public class DialogService : IDialogService
         });
 
         return await tcs.Task;
+#elif LINUXGTK
+        return await Dispatcher.DispatchAsync(async () =>
+        {
+            var dialog = Gtk.FileDialog.New();
+            dialog.SetTitle(title);
+            dialog.SetModal(true);
+            var cleanExt = extension.TrimStart('.');
+            dialog.SetInitialName(suggestedName);
+            var filterList = Gio.ListStore.New(Gtk.FileFilter.GetGType());
+            var filter = Gtk.FileFilter.New();
+            filter.AddSuffix(cleanExt);
+            filterList.Append(filter);
+            dialog.SetFilters(filterList);
+            var window = GetActiveGtkWindow();
+            if (window is null) return null;
+            try
+            {
+                var file = await dialog.SaveAsync(window);
+                return file?.GetPath();
+            }
+            catch { return null; }
+        });
 #else
         return await Task.FromResult<string?>(null);
 #endif
@@ -319,6 +372,21 @@ public class DialogService : IDialogService
     {
         var window = Application.Current!.Windows[0].Handler!.PlatformView as Microsoft.UI.Xaml.Window;
         return WinRT.Interop.WindowNative.GetWindowHandle(window);
+    }
+#endif
+
+#if LINUXGTK
+    private static Gtk.Window? GetActiveGtkWindow()
+    {
+        if (Gtk.Application.GetDefault() is Gtk.Application app && app.GetActiveWindow() is Gtk.Window active)
+            return active;
+        var toplevels = Gtk.Window.GetToplevels();
+        for (uint i = 0; i < toplevels.GetNItems(); i++)
+        {
+            if (toplevels.GetObject(i) is Gtk.Window window)
+                return window;
+        }
+        return null;
     }
 #endif
 }

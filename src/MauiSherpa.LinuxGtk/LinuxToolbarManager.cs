@@ -1,4 +1,5 @@
 using MauiSherpa.Core.Interfaces;
+using MauiSherpa.Pages.Forms;
 
 namespace MauiSherpa;
 
@@ -17,6 +18,8 @@ public class LinuxToolbarManager
     private readonly IAppleIdentityStateService _appleIdentityState;
     private readonly IGoogleIdentityService _googleIdentityService;
     private readonly IGoogleIdentityStateService _googleIdentityState;
+    private readonly IFormModalService _formModalService;
+    private readonly HybridFormBridgeHolder _bridgeHolder;
     private Gtk.HeaderBar? _headerBar;
     private Gtk.Window? _window;
     private readonly List<Gtk.Widget> _endWidgets = new();
@@ -26,6 +29,8 @@ public class LinuxToolbarManager
     private Gtk.Button? _copilotButton;
     private Gtk.Image? _copilotImage;
     private Gtk.DropDown? _identityDropdown;
+    private CancellationTokenSource? _identityCts;
+    private bool _rebuildQueued;
     private string _currentRoute = "";
     private IReadOnlyList<AppleIdentity>? _cachedAppleIdentities;
     private IReadOnlyList<GoogleIdentity>? _cachedGoogleIdentities;
@@ -49,8 +54,8 @@ public class LinuxToolbarManager
         ["trash"] = "edit-delete-symbolic",
         ["checkmark"] = "object-select-symbolic",
         ["square.and.arrow.down"] = "document-save-symbolic",
-        ["square.and.arrow.up"] = "go-up-symbolic",
-        ["wand.and.stars"] = "system-run-symbolic",
+        ["square.and.arrow.up"] = "document-send-symbolic",
+        ["wand.and.stars"] = "go-up-symbolic",
 
         // Font Awesome names mapped to GTK icons
         ["fa-cog"] = "emblem-system-symbolic",
@@ -72,7 +77,9 @@ public class LinuxToolbarManager
         IAppleIdentityService appleIdentityService,
         IAppleIdentityStateService appleIdentityState,
         IGoogleIdentityService googleIdentityService,
-        IGoogleIdentityStateService googleIdentityState)
+        IGoogleIdentityStateService googleIdentityState,
+        IFormModalService formModalService,
+        HybridFormBridgeHolder bridgeHolder)
     {
         _toolbarService = toolbarService;
         _copilotContext = copilotContext;
@@ -81,11 +88,11 @@ public class LinuxToolbarManager
         _appleIdentityState = appleIdentityState;
         _googleIdentityService = googleIdentityService;
         _googleIdentityState = googleIdentityState;
+        _formModalService = formModalService;
+        _bridgeHolder = bridgeHolder;
         _toolbarService.ToolbarChanged += OnToolbarChanged;
         _toolbarService.RouteChanged += OnRouteChanged;
         _themeService.ThemeChanged += OnThemeChanged;
-        _appleIdentityState.OnSelectionChanged += OnToolbarChanged;
-        _googleIdentityState.OnSelectionChanged += OnToolbarChanged;
     }
 
     public void AttachToWindow(Gtk.Window window)
@@ -93,6 +100,8 @@ public class LinuxToolbarManager
         _window = window;
         _headerBar = Gtk.HeaderBar.New();
         _headerBar.SetShowTitleButtons(true);
+        // Hide the window title text — app icon in the HeaderBar is sufficient
+        _headerBar.SetTitleWidget(Gtk.Label.New(""));
 
         // App icon on the far left with spacing
         var appIconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "appicon-24.png");
@@ -111,6 +120,13 @@ public class LinuxToolbarManager
         _copilotButton.SetChild(_copilotImage);
         _copilotButton.OnClicked += (s, _) => _copilotContext.ToggleOverlay();
         _headerBar.PackStart(_copilotButton);
+
+        // Settings gear button on the right side
+        var settingsButton = Gtk.Button.New();
+        settingsButton.SetIconName("emblem-system-symbolic");
+        settingsButton.SetTooltipText("Settings");
+        settingsButton.OnClicked += (s, _) => OpenSettingsDialog();
+        _headerBar.PackEnd(settingsButton);
 
         _window.SetTitlebar(_headerBar);
     }
@@ -140,14 +156,27 @@ public class LinuxToolbarManager
     private void OnToolbarChanged()
     {
         if (_headerBar == null) return;
-        RebuildToolbar();
+        ScheduleRebuild();
     }
 
     private void OnRouteChanged(string route)
     {
         _currentRoute = route;
         if (_headerBar == null) return;
-        RebuildToolbar();
+        ScheduleRebuild();
+    }
+
+    private void ScheduleRebuild()
+    {
+        if (_rebuildQueued) return;
+        _rebuildQueued = true;
+        // Coalesce rapid-fire toolbar events into a single rebuild on the next idle tick
+        GLib.Functions.IdleAdd(0, () =>
+        {
+            _rebuildQueued = false;
+            RebuildToolbar();
+            return false; // run once
+        });
     }
 
     private void RebuildToolbar()
@@ -184,6 +213,9 @@ public class LinuxToolbarManager
         var items = _toolbarService.CurrentItems;
         for (int i = items.Count - 1; i >= 0; i--)
         {
+            // Skip "settings" — we have a persistent gear button in the HeaderBar
+            if (items[i].Id == "settings") continue;
+
             var button = CreateButton(items[i]);
             _headerBar!.PackEnd(button);
             _endWidgets.Add(button);
@@ -214,22 +246,26 @@ public class LinuxToolbarManager
         }
 
         // Add identity picker for Apple/Google routes
+        // Cancel any in-flight identity fetch to prevent duplicate dropdowns
+        _identityCts?.Cancel();
+        _identityCts = new CancellationTokenSource();
+        var ct = _identityCts.Token;
         if (AppleRoutes.Contains(_currentRoute))
         {
-            _ = AddAppleIdentityPickerAsync();
+            _ = AddAppleIdentityPickerAsync(ct);
         }
         else if (GoogleRoutes.Contains(_currentRoute))
         {
-            _ = AddGoogleIdentityPickerAsync();
+            _ = AddGoogleIdentityPickerAsync(ct);
         }
     }
 
-    private async Task AddAppleIdentityPickerAsync()
+    private async Task AddAppleIdentityPickerAsync(CancellationToken ct)
     {
         try
         {
             _cachedAppleIdentities = await _appleIdentityService.GetIdentitiesAsync();
-            if (_cachedAppleIdentities.Count == 0) return;
+            if (ct.IsCancellationRequested || _cachedAppleIdentities.Count == 0) return;
 
             var names = _cachedAppleIdentities.Select(i => i.Name).ToArray();
             var selectedIndex = 0;
@@ -258,12 +294,12 @@ public class LinuxToolbarManager
         catch { /* Identity service may not be configured */ }
     }
 
-    private async Task AddGoogleIdentityPickerAsync()
+    private async Task AddGoogleIdentityPickerAsync(CancellationToken ct)
     {
         try
         {
             _cachedGoogleIdentities = await _googleIdentityService.GetIdentitiesAsync();
-            if (_cachedGoogleIdentities.Count == 0) return;
+            if (ct.IsCancellationRequested || _cachedGoogleIdentities.Count == 0) return;
 
             var names = _cachedGoogleIdentities.Select(i => i.Name).ToArray();
             var selectedIndex = 0;
@@ -290,6 +326,15 @@ public class LinuxToolbarManager
             _startWidgets.Add(_identityDropdown);
         }
         catch { /* Identity service may not be configured */ }
+    }
+
+    private void OpenSettingsDialog()
+    {
+        Microsoft.Maui.Controls.Application.Current?.Dispatcher.Dispatch(async () =>
+        {
+            var page = new SettingsPage(_bridgeHolder);
+            await _formModalService.ShowViewAsync(page, async () => await page.ShowAsync());
+        });
     }
 
     private Gtk.Button CreateButton(ToolbarAction action)
@@ -321,7 +366,10 @@ public class LinuxToolbarManager
         var capturedId = action.Id;
         button.OnClicked += (s, _) =>
         {
-            _toolbarService.InvokeToolbarItemClicked(capturedId);
+            if (capturedId == "settings")
+                OpenSettingsDialog();
+            else
+                _toolbarService.InvokeToolbarItemClicked(capturedId);
         };
 
         return button;

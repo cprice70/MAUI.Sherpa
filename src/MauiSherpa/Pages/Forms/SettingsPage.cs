@@ -6,6 +6,9 @@ using Microsoft.Maui.Platform.MacOS.Controls;
 #else
 using Microsoft.AspNetCore.Components.WebView.Maui;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -29,6 +32,9 @@ public class SettingsPage : ContentPage
 #if MACOSAPP
         MacOSPage.SetModalSheetWidth(this, 800);
         MacOSPage.SetModalSheetHeight(this, 600);
+#elif LINUXGTK
+        GtkPage.SetModalWidth(this, 800);
+        GtkPage.SetModalHeight(this, 600);
 #endif
     }
 
@@ -180,6 +186,7 @@ public class SettingsPage : ContentPage
             },
             Padding = 0,
             RowSpacing = 0,
+            VerticalOptions = LayoutOptions.Fill,
         };
 
         Grid.SetRow(titleLabel, 0);

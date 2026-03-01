@@ -3,6 +3,9 @@ using MauiSherpa.Pages.Forms;
 #if MACOSAPP
 using Microsoft.Maui.Platform.MacOS;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Modals;
 
@@ -21,6 +24,9 @@ public class KeystoreSignaturesPage : HybridViewPage
 #if MACOSAPP
         MacOSPage.SetModalSheetWidth(this, 900);
         MacOSPage.SetModalSheetHeight(this, 500);
+#elif LINUXGTK
+        GtkPage.SetModalWidth(this, 900);
+        GtkPage.SetModalHeight(this, 500);
 #endif
     }
 }

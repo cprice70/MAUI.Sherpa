@@ -5,6 +5,9 @@ using Microsoft.Maui.Platform.MacOS.Controls;
 #else
 using Microsoft.AspNetCore.Components.WebView.Maui;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -26,6 +29,9 @@ public class ProgressModalPage : ContentPage
         // Use explicit dimensions instead.
         MacOSPage.SetModalSheetWidth(this, minWidth);
         MacOSPage.SetModalSheetHeight(this, minHeight);
+#elif LINUXGTK
+        GtkPage.SetModalWidth(this, minWidth);
+        GtkPage.SetModalHeight(this, minHeight);
 #endif
         BuildPage(route);
     }

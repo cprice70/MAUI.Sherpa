@@ -5,6 +5,9 @@ using Microsoft.Maui.Platform.MacOS.Controls;
 #else
 using Microsoft.AspNetCore.Components.WebView.Maui;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -30,6 +33,9 @@ public abstract class HybridViewPage : ContentPage
 #if MACOSAPP
         MacOSPage.SetModalSheetSizesToContent(this, false);
         MacOSPage.SetModalSheetMinWidth(this, 500);
+#elif LINUXGTK
+        GtkPage.SetModalSizesToContent(this, false);
+        GtkPage.SetModalMinWidth(this, 500);
 #endif
     }
 

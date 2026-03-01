@@ -1,5 +1,8 @@
 using Microsoft.Maui.Controls;
 using MauiSherpa.Core.Interfaces;
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -39,6 +42,9 @@ public abstract class FormPage<TResult> : ContentPage, IFormPage<TResult>, IForm
 #if MACOSAPP
         Microsoft.Maui.Platform.MacOS.MacOSPage.SetModalSheetSizesToContent(this, true);
         Microsoft.Maui.Platform.MacOS.MacOSPage.SetModalSheetMinWidth(this, 420);
+#elif LINUXGTK
+        GtkPage.SetModalSizesToContent(this, true);
+        GtkPage.SetModalMinWidth(this, 420);
 #endif
     }
 

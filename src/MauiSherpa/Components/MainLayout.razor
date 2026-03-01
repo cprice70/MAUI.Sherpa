@@ -26,6 +26,8 @@
                 <i class="fas fa-stethoscope nav-icon"></i>
                 <span>Doctor</span>
             </NavLink>
+            @if (!PlatformInfo.HasNativeToolbar)
+            {
             <NavLink class="nav-item" href="settings">
                 <i class="fas fa-cog nav-icon"></i>
                 <span>Settings</span>
@@ -34,6 +36,7 @@
                     <i class="fas fa-arrow-circle-up nav-update-badge" title="Update available"></i>
                 }
             </NavLink>
+            }
             
             <div class="nav-section"><i class="fab fa-android nav-section-icon"></i> Android</div>
             <NavLink class="nav-item" href="devices">

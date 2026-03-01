@@ -6,6 +6,9 @@ using Microsoft.Maui.Platform.MacOS.Controls;
 #else
 using Microsoft.AspNetCore.Components.WebView.Maui;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -45,6 +48,9 @@ public abstract class HybridFormPage<TResult> : ContentPage, IFormPage<TResult>,
 #if MACOSAPP
         MacOSPage.SetModalSheetSizesToContent(this, true);
         MacOSPage.SetModalSheetMinWidth(this, 500);
+#elif LINUXGTK
+        GtkPage.SetModalSizesToContent(this, true);
+        GtkPage.SetModalMinWidth(this, 500);
 #endif
     }
 
@@ -189,6 +195,7 @@ public abstract class HybridFormPage<TResult> : ContentPage, IFormPage<TResult>,
             },
             Padding = 0,
             RowSpacing = 0,
+            VerticalOptions = LayoutOptions.Fill,
         };
 
         Grid.SetRow(titleLabel, 0);

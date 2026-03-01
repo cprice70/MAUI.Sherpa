@@ -6,6 +6,9 @@ using Microsoft.Maui.Platform.MacOS.Controls;
 #else
 using Microsoft.AspNetCore.Components.WebView.Maui;
 #endif
+#if LINUXGTK
+using Platform.Maui.Linux.Gtk4.Platform;
+#endif
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -199,6 +202,7 @@ public abstract class WizardFormPage<TResult> : ContentPage, IFormPage<TResult>,
             },
             Padding = 0,
             RowSpacing = 0,
+            VerticalOptions = LayoutOptions.Fill,
         };
 
         Grid.SetRow(titleLabel, 0);
