@@ -107,6 +107,8 @@ public class BlazorContentPage : ContentPage
         {
             if (_loadingOverlay != null)
             {
+                if (_blazorWebView.Handler?.PlatformView is WebKit.WKWebView wv)
+                    wv.Hidden = false;
                 HideSplash();
                 _ = _blazorWebView.FadeToAsync(1, 300, Easing.CubicIn);
             }
@@ -158,6 +160,9 @@ public class BlazorContentPage : ContentPage
         // WKWebView draws an opaque background by default.
         // Use KVC to disable it so the native window background is visible.
         webView.SetValueForKey(NSObject.FromObject(false), new NSString("drawsBackground"));
+
+        // Also hide the native view until Blazor is ready — prevents dark flash
+        webView.Hidden = true;
     }
 
     private TitlebarDragView? _dragOverlay;
@@ -199,6 +204,10 @@ public class BlazorContentPage : ContentPage
     {
         Dispatcher.Dispatch(async () =>
         {
+            // Unhide the native WKWebView before fading in
+            if (_blazorWebView.Handler?.PlatformView is WebKit.WKWebView webView)
+                webView.Hidden = false;
+
             HideSplash();
             await _blazorWebView.FadeToAsync(1, 300, Easing.CubicIn);
             SetupSidebarWidthPersistence();
