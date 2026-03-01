@@ -199,7 +199,9 @@ public class DialogService : IDialogService
             var fileTypes = new Dictionary<DevicePlatform, IEnumerable<string>>();
             if (extensions != null && extensions.Length > 0)
             {
-                fileTypes[DevicePlatform.WinUI] = extensions.Select(e => "." + e.TrimStart('.'));
+                var dotExtensions = extensions.Select(e => "." + e.TrimStart('.'));
+                fileTypes[DevicePlatform.WinUI] = dotExtensions;
+                fileTypes[DevicePlatform.macOS] = dotExtensions;
             }
 
             var picker = _filePicker ?? FilePicker.Default;
@@ -212,7 +214,8 @@ public class DialogService : IDialogService
             });
             return result?.FullPath;
         }
-        catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
+        catch (Exception ex) when (ex is PlatformNotSupportedException
+            || ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
         {
             return null;
         }
