@@ -62,6 +62,15 @@ public class App : Application
         // to context events before the Blazor app loads.
         _serviceProvider.GetRequiredService<ICopilotModalService>();
 
+        // Suppress titlebar controls whenever any modal is pushed, restore when all are popped.
+        window.ModalPushed += (_, _) => toolbarService.SetToolbarSuppressed(true);
+        window.ModalPopped += (_, _) =>
+        {
+            var nav = window.Page?.Navigation;
+            if (nav == null || nav.ModalStack.Count == 0)
+                toolbarService.SetToolbarSuppressed(false);
+        };
+
         window.HandlerChanged += (s, e) =>
         {
             if (window.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)

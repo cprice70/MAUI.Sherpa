@@ -105,6 +105,28 @@ public class WindowsTitleBarManager
 
         _titleBar.PassthroughElements.Clear();
 
+        // When toolbar is suppressed (e.g. modal is open), show minimal titlebar
+        if (_toolbarService.IsToolbarSuppressed)
+        {
+            var minimal = new HorizontalStackLayout
+            {
+                Spacing = 6,
+                VerticalOptions = LayoutOptions.Center,
+                Padding = new Thickness(8, 0, 0, 0),
+            };
+            minimal.Children.Add(new Image
+            {
+                Source = "sherpalogo.png",
+                HeightRequest = 28,
+                WidthRequest = 28,
+                VerticalOptions = LayoutOptions.Center,
+            });
+            _titleBar.LeadingContent = minimal;
+            _titleBar.Content = null;
+            _titleBar.TrailingContent = null;
+            return;
+        }
+
         // Split actions: "add" types go left, "refresh" types go right
         var leadingActions = new List<ToolbarAction>();
         var trailingActions = new List<ToolbarAction>();

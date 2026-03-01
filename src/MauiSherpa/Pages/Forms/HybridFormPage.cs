@@ -197,6 +197,7 @@ public abstract class HybridFormPage<TResult> : ContentPage, IFormPage<TResult>,
             RowSpacing = 0,
             VerticalOptions = LayoutOptions.Fill,
         };
+        grid.SetDynamicResource(Grid.BackgroundColorProperty, FormTheme.PageBg);
 
         Grid.SetRow(titleLabel, 0);
         Grid.SetRow(headerSeparator, 1);
