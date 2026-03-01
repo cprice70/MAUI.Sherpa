@@ -20,8 +20,8 @@
     IsDirty="isDirty" />
 
 <div class="push-layout">
+    <h2 class="section-title"><i class="fas fa-key"></i> Authentication</h2>
     <div class="push-section">
-        <div class="section-header"><i class="fas fa-key"></i> Authentication</div>
         <div class="section-body">
             <div class="form-group">
                 <label>Auth Method</label>
@@ -78,8 +78,8 @@
         </div>
     </div>
 
+    <h2 class="section-title"><i class="fas fa-sliders-h"></i> Push Configuration</h2>
     <div class="push-section">
-        <div class="section-header"><i class="fas fa-sliders-h"></i> Push Configuration</div>
         <div class="section-body">
             <div class="form-row">
                 <div class="form-group flex-1">
@@ -132,8 +132,8 @@
         </div>
     </div>
 
+    <h2 class="section-title"><i class="fas fa-envelope"></i> Payload</h2>
     <div class="push-section">
-        <div class="section-header"><i class="fas fa-envelope"></i> Payload</div>
         <div class="section-body">
             <div class="form-row">
                 <div class="form-group flex-1">
@@ -161,13 +161,13 @@
 
     @if (activeProject?.History.Count > 0)
     {
+        <div class="section-title-row">
+            <h2 class="section-title"><i class="fas fa-history"></i> Send History</h2>
+            <button class="btn-clear" @onclick="ClearHistory">
+                <i class="fas fa-eraser"></i> Clear
+            </button>
+        </div>
         <div class="push-section">
-            <div class="section-header">
-                <span><i class="fas fa-history"></i> Send History</span>
-                <button class="btn-clear" @onclick="ClearHistory">
-                    <i class="fas fa-eraser"></i> Clear
-                </button>
-            </div>
             <div class="section-body history-list">
                 @foreach (var entry in activeProject.History)
                 {
@@ -223,15 +223,25 @@
         overflow: hidden;
     }
 
-    .section-header {
-        padding: 12px 20px;
+    .section-title {
         font-weight: 600;
         font-size: 14px;
         color: var(--text-primary);
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: 8px;
+        margin: 0 0 4px 4px;
+    }
+
+    .section-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+    }
+
+    .section-title-row .section-title {
+        margin-bottom: 0;
     }
 
     .section-body {
