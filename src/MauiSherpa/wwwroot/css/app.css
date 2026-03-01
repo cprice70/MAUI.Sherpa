@@ -24,6 +24,10 @@
     --card-shadow: none;
     --card-shadow-lg: none;
     --card-radius: 1rem;
+
+    /* Button styles */
+    --btn-secondary-bg: #dce1e8;
+    --btn-secondary-hover: #c7cdd6;
     
     /* Input styles */
     --input-bg: #ffffff;
@@ -108,6 +112,10 @@
     --card-shadow: none;
     --card-shadow-lg: none;
     --card-radius: 1rem;
+
+    /* Button styles */
+    --btn-secondary-bg: #3d4349;
+    --btn-secondary-hover: #4d545b;
     
     /* Input styles */
     --input-bg: #374151;
@@ -524,13 +532,13 @@ pre {
 }
 
 .btn-secondary {
-    background-color: var(--bg-tertiary);
+    background-color: var(--btn-secondary-bg);
     color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    border: none;
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background-color: var(--bg-hover);
+    background-color: var(--btn-secondary-hover);
 }
 
 .btn-danger {
