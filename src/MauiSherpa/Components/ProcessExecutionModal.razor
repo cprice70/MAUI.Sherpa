@@ -48,6 +48,9 @@
         else if (CurrentView == ModalView.Running)
         {
             <div class="running-view">
+                <div class="terminal-wrapper">
+                    <div class="terminal-container" id="process-terminal"></div>
+                </div>
                 <div class="process-status-bar">
                     <div class="process-status-info">
                         <span class="spinner">⏳</span>
@@ -62,14 +65,18 @@
                         </button>
                     </div>
                 </div>
-                <div class="terminal-wrapper">
-                    <div class="terminal-container" id="process-terminal"></div>
-                </div>
             </div>
         }
         else if (CurrentView == ModalView.Completed)
         {
             <div class="completed-view">
+                <div class="terminal-wrapper completed">
+                    <div class="terminal-header">
+                        <span>Output</span>
+                        <button class="btn-icon" @onclick="CopyOutput" title="Copy output">📋</button>
+                    </div>
+                    <div class="terminal-container" id="process-terminal"></div>
+                </div>
                 <div class="result-status @GetResultClass()">
                     <span class="result-icon">@GetResultIcon()</span>
                     <span class="result-text">@GetResultText()</span>
@@ -83,13 +90,6 @@
                         <label>Duration:</label>
                         <span>@Result?.Duration.ToString(@"mm\:ss\.fff")</span>
                     </div>
-                </div>
-                <div class="terminal-wrapper completed">
-                    <div class="terminal-header">
-                        <span>Output</span>
-                        <button class="btn-icon" @onclick="CopyOutput" title="Copy output">📋</button>
-                    </div>
-                    <div class="terminal-container" id="process-terminal"></div>
                 </div>
             </div>
         }
@@ -186,7 +186,7 @@
         padding: 0.625rem 0.875rem;
         background: var(--bg-tertiary, #f7fafc);
         border-radius: var(--card-radius, 1rem);
-        margin-bottom: 0.75rem;
+        margin-top: 0.75rem;
     }
 
     .process-status-info {

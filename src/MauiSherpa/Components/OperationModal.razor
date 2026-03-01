@@ -14,6 +14,25 @@
     <div class="operation-content" id="operation-modal">
         <div class="description">@ModalService.Description</div>
 
+        <div class="log-section">
+            <div class="log-header">
+                <span><i class="fas fa-list"></i> Activity Log</span>
+                <button class="btn-icon" @onclick="CopyLog" title="Copy log">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </div>
+            <div class="log-container" @ref="_logContainer">
+                @foreach (var entry in ModalService.LogEntries)
+                {
+                    <div class="log-entry @GetLogLevelClass(entry.Level)">
+                        <span class="log-time">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                        <i class="fas @GetLogLevelIcon(entry.Level)"></i>
+                        <span class="log-message">@entry.Message</span>
+                    </div>
+                }
+            </div>
+        </div>
+
         @if (ModalService.IsRunning)
         {
             <div class="progress-section">
@@ -49,25 +68,6 @@
                 </div>
             </div>
         }
-
-        <div class="log-section">
-            <div class="log-header">
-                <span><i class="fas fa-list"></i> Activity Log</span>
-                <button class="btn-icon" @onclick="CopyLog" title="Copy log">
-                    <i class="fas fa-copy"></i>
-                </button>
-            </div>
-            <div class="log-container" @ref="_logContainer">
-                @foreach (var entry in ModalService.LogEntries)
-                {
-                    <div class="log-entry @GetLogLevelClass(entry.Level)">
-                        <span class="log-time">@entry.Timestamp.ToString("HH:mm:ss")</span>
-                        <i class="fas @GetLogLevelIcon(entry.Level)"></i>
-                        <span class="log-message">@entry.Message</span>
-                    </div>
-                }
-            </div>
-        </div>
     </div>
 }
 

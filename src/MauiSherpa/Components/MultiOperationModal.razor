@@ -14,33 +14,6 @@
     <div class="multi-op-content" id="multi-op-modal">
         <p class="description">@ModalService.Description</p>
 
-        @if (HasResult)
-        {
-            <div class="result-summary @GetOverallResultClass()">
-                <div class="summary-stats">
-                    <span class="stat"><i class="fas fa-check-circle"></i> @CompletedCount completed</span>
-                    @if (FailedCount > 0)
-                    {
-                        <span class="stat error"><i class="fas fa-times-circle"></i> @FailedCount failed</span>
-                    }
-                    @if (SkippedCount > 0)
-                    {
-                        <span class="stat skipped"><i class="fas fa-forward"></i> @SkippedCount skipped</span>
-                    }
-                </div>
-                <span class="duration"><i class="fas fa-clock"></i> @ElapsedTime</span>
-            </div>
-        }
-        else if (ModalService.IsRunning)
-        {
-            <div class="progress-summary">
-                <div class="progress-bar-container">
-                    <div class="progress-bar" style="width: @ProgressPercent%"></div>
-                </div>
-                <span class="progress-text">@CurrentProgress / @TotalEnabled</span>
-            </div>
-        }
-
         <div class="operations-list">
             @foreach (var op in ModalService.Operations)
             {
@@ -120,6 +93,33 @@
                 </div>
             }
         </div>
+
+        @if (HasResult)
+        {
+            <div class="result-summary @GetOverallResultClass()">
+                <div class="summary-stats">
+                    <span class="stat"><i class="fas fa-check-circle"></i> @CompletedCount completed</span>
+                    @if (FailedCount > 0)
+                    {
+                        <span class="stat error"><i class="fas fa-times-circle"></i> @FailedCount failed</span>
+                    }
+                    @if (SkippedCount > 0)
+                    {
+                        <span class="stat skipped"><i class="fas fa-forward"></i> @SkippedCount skipped</span>
+                    }
+                </div>
+                <span class="duration"><i class="fas fa-clock"></i> @ElapsedTime</span>
+            </div>
+        }
+        else if (ModalService.IsRunning)
+        {
+            <div class="progress-summary">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" style="width: @ProgressPercent%"></div>
+                </div>
+                <span class="progress-text">@CurrentProgress / @TotalEnabled</span>
+            </div>
+        }
     </div>
 }
 
