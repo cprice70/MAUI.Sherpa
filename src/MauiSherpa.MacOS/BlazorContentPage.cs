@@ -77,6 +77,7 @@ public class BlazorContentPage : ContentPage
             HostPage = "wwwroot/index.html",
             ContentInsets = new Thickness(0, 52, 0, 0),
             HideScrollPocketOverlay = true,
+            Opacity = 0,
         };
         _blazorWebView.RootComponents.Add(new BlazorRootComponent
         {
@@ -105,7 +106,10 @@ public class BlazorContentPage : ContentPage
         Dispatcher.StartTimer(TimeSpan.FromSeconds(15), () =>
         {
             if (_loadingOverlay != null)
+            {
                 HideSplash();
+                _ = _blazorWebView.FadeToAsync(1, 300, Easing.CubicIn);
+            }
             return false;
         });
     }
@@ -193,9 +197,10 @@ public class BlazorContentPage : ContentPage
 
     private void OnBlazorReady()
     {
-        Dispatcher.Dispatch(() =>
+        Dispatcher.Dispatch(async () =>
         {
             HideSplash();
+            await _blazorWebView.FadeToAsync(1, 300, Easing.CubicIn);
             SetupSidebarWidthPersistence();
 
             // Defensive: after everything is ready, verify toolbar was properly
