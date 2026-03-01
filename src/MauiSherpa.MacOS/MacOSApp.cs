@@ -23,7 +23,7 @@ class MacOSApp : Application
     {
         _serviceProvider = serviceProvider;
         _preferences = serviceProvider.GetRequiredService<IPreferences>();
-        MauiSherpa.Pages.Forms.FormTheme.Register(this);
+        MauiSherpa.Pages.Forms.FormTheme.Register(this, serviceProvider.GetRequiredService<IThemeService>());
 
         // Global exception handlers to log crashes
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>

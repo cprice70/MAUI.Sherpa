@@ -1,4 +1,5 @@
 using Microsoft.Maui.Controls;
+using MauiSherpa.Core.Interfaces;
 
 namespace MauiSherpa.Pages.Forms;
 
@@ -53,26 +54,13 @@ public static class FormTheme
     /// and subscribe to theme changes so DynamicResource bindings update.
     /// Call once during app startup.
     /// </summary>
-    public static void Register(Application app)
+    public static void Register(Application app, IThemeService themeService)
     {
-        ApplyTheme(app.Resources, IsDark(app));
+        ApplyTheme(app.Resources, themeService.IsDarkMode);
 
-        app.RequestedThemeChanged += (_, e) =>
-            ApplyTheme(app.Resources, IsDark(app));
-
-        // Also update when UserAppTheme is set programmatically (manual theme switch)
-        app.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(Application.UserAppTheme))
-                ApplyTheme(app.Resources, IsDark(app));
-        };
-    }
-
-    static bool IsDark(Application app)
-    {
-        if (app.UserAppTheme != AppTheme.Unspecified)
-            return app.UserAppTheme == AppTheme.Dark;
-        return app.PlatformAppTheme == AppTheme.Dark;
+        // Primary signal: IThemeService.ThemeChanged covers both manual and system theme changes
+        themeService.ThemeChanged += () =>
+            ApplyTheme(app.Resources, themeService.IsDarkMode);
     }
 
     static void ApplyTheme(ResourceDictionary resources, bool dark)
