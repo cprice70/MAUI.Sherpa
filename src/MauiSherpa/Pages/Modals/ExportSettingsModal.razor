@@ -264,6 +264,8 @@
             var savePath = await DialogService.PickSaveFileAsync("Save Backup", suggestedName, "mss");
             if (!string.IsNullOrEmpty(savePath))
             {
+                File.Copy(tempPath, savePath, overwrite: true);
+                try { File.Delete(tempPath); } catch { }
                 await AlertService.ShowToastAsync($"Settings exported to {savePath}");
                 ModalParams.Complete(true);
             }

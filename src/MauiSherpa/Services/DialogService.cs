@@ -3,6 +3,9 @@ using MauiSherpa.Core.Interfaces;
 using Foundation;
 using UIKit;
 using UniformTypeIdentifiers;
+#elif MACOSAPP
+using AppKit;
+using Foundation;
 #endif
 using Microsoft.Extensions.DependencyInjection;
 
@@ -283,6 +286,29 @@ public class DialogService : IDialogService
             var file = await savePicker.PickSaveFileAsync();
             return file?.Path;
         });
+#elif MACOSAPP
+        var tcs = new TaskCompletionSource<string?>();
+
+        await Dispatcher.DispatchAsync(() =>
+        {
+            var panel = new NSSavePanel
+            {
+                Title = title,
+                NameFieldStringValue = suggestedName,
+                CanCreateDirectories = true,
+            };
+
+            var cleanExt = extension.TrimStart('.');
+            panel.AllowedFileTypes = new[] { cleanExt };
+
+            var result = panel.RunModal();
+            if (result == 1 && panel.Url?.Path is string path)
+                tcs.TrySetResult(path);
+            else
+                tcs.TrySetResult(null);
+        });
+
+        return await tcs.Task;
 #else
         return await Task.FromResult<string?>(null);
 #endif
