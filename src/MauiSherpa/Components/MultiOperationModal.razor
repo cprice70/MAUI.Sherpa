@@ -397,7 +397,14 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await Task.CompletedTask;
+        if (ModalService.IsRunning || HasResult)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "document.getElementById('multi-op-modal')?.scrollTo({top: document.getElementById('multi-op-modal').scrollHeight, behavior: 'smooth'})");
+            }
+            catch { /* component may be disposed */ }
+        }
     }
 
     private void HandleShowRequested(string title, string description)
