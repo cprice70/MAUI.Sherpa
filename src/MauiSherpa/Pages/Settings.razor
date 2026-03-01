@@ -1170,11 +1170,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        ToolbarService.SetItems(
-            new ToolbarAction("save", "Save", "checkmark"),
-            new ToolbarAction("reset", "Reset to Defaults", "trash")
-        );
-        ToolbarService.ToolbarItemClicked += OnToolbarItemClicked;
+        if (!PlatformInfo.HasNativeToolbar)
+        {
+            ToolbarService.SetItems(
+                new ToolbarAction("save", "Save", "checkmark"),
+                new ToolbarAction("reset", "Reset to Defaults", "trash")
+            );
+            ToolbarService.ToolbarItemClicked += OnToolbarItemClicked;
+        }
 
         // Sync ViewModel with current theme service state
         ViewModel.Theme = ThemeService.CurrentTheme;
