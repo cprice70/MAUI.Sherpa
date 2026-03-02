@@ -47,6 +47,7 @@ public class SettingsViewModel : ViewModelBase
     {
         public Task ShowAlertAsync(string title, string message, string? cancel = null) => Task.CompletedTask;
         public Task<bool> ShowConfirmAsync(string title, string message, string? confirm = null, string? cancel = null) => Task.FromResult(true);
+        public Task<string?> ShowActionSheetAsync(string title, string? cancel, string? destruction, params string[] buttons) => Task.FromResult<string?>(null);
         public Task ShowToastAsync(string message) => Task.CompletedTask;
     }
 

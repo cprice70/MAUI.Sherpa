@@ -24,8 +24,9 @@ dotnet tool install --global androidsdk.tool    # Android only
 dotnet tool install --global appledev.tools     # iOS/Mac only
 ```
 
-Keep the skill up to date: `maui-devflow update-skill`. For full update and version checking
-procedures, see [references/setup.md](references/setup.md#checking-for-updates).
+Keep the skill up to date: `maui-devflow update-skill`. Check installed version vs remote
+with `maui-devflow skill-version`. For full update procedures, see
+[references/setup.md](references/setup.md#checking-for-updates).
 
 ## Integrating MauiDevFlow into a MAUI App
 
@@ -46,19 +47,38 @@ For complete setup instructions, see [references/setup.md](references/setup.md).
 
 ### 1. Ensure a Device/Simulator/Emulator is Running
 
+**⚠️ Multi-project conflict avoidance:** When multiple projects may run simultaneously
+(common with AI agents), each project should use its own dedicated simulator/emulator to
+prevent apps from replacing each other. Check what's already in use first:
+
+```bash
+maui-devflow list                                             # see all registered agents
+```
+
+If another iOS or Android agent is already registered, **create a new simulator/emulator**
+for your project instead of reusing the one that's already booted.
+
 **iOS Simulator:**
 ```bash
 xcrun simctl list devices booted                              # check booted sims
-xcrun simctl boot <UDID>                                      # boot if needed
+
+# Create a project-dedicated simulator to avoid conflicts
+xcrun simctl create "MyApp-iPhone17Pro" "iPhone 17 Pro" "iOS 26.2"
+xcrun simctl boot <UDID>                                      # boot the new sim
 ```
 
 **Android Emulator:**
 ```bash
 android avd list                                              # list AVDs
-android avd start --name <avd-name>                           # start emulator
+
+# Create a project-dedicated emulator to avoid conflicts
+android avd create --name "MyApp-Pixel8" \
+  --sdk "system-images;android-35;google_apis;arm64-v8a" --device pixel_8
+android avd start --name "MyApp-Pixel8"
 ```
 
 **Mac Catalyst / macOS (AppKit) / Linux/GTK:** No device setup needed — runs as desktop app.
+Multiple desktop apps can run simultaneously without conflicts.
 
 ### 2. Detect the TFM
 
@@ -134,10 +154,13 @@ if the build fails.
 
 **Typical inspection flow:**
 1. `maui-devflow MAUI tree` — see the full visual tree with element IDs, types, text, bounds
-2. `maui-devflow MAUI query --automationId "MyButton"` — find specific elements
-3. `maui-devflow MAUI element <id>` — get full details (type, bounds, visibility, children)
-4. `maui-devflow MAUI property <id> Text` — read any property by name
-5. `maui-devflow MAUI screenshot --output screen.png` — visual verification
+2. `maui-devflow MAUI tree --window 1` — filter to a specific window (0-based index)
+3. `maui-devflow MAUI query --automationId "MyButton"` — find specific elements
+4. `maui-devflow MAUI element <id>` — get full details (type, bounds, visibility, children)
+5. `maui-devflow MAUI property <id> Text` — read any property by name
+6. `maui-devflow MAUI screenshot --output screen.png` — visual verification
+7. `maui-devflow MAUI screenshot --id <elementId> --output el.png` — element-only screenshot
+8. `maui-devflow MAUI screenshot --selector "Button" --output btn.png` — screenshot by CSS selector
 
 **Property inspection** is more reliable than screenshots for verifying exact runtime values:
 ```bash
@@ -224,17 +247,20 @@ or `maui-devflow --agent-port 10224 MAUI status` — both are valid.
 
 | Command | Description |
 |---------|-------------|
-| `MAUI status` | Agent connection status, platform, app name |
-| `MAUI tree [--depth N]` | Visual tree (IDs, types, text, bounds). Depth 0=unlimited |
+| `MAUI status [--window W]` | Agent connection status, platform, app name, window count |
+| `MAUI tree [--depth N] [--window W]` | Visual tree (IDs, types, text, bounds). Depth 0=unlimited. Window is 0-based index; omit for all windows |
 | `MAUI query --type T --automationId A --text T` | Find elements (any/all filters) |
 | `MAUI tap <elementId>` | Tap an element |
 | `MAUI fill <elementId> <text>` | Fill text into Entry/Editor |
 | `MAUI clear <elementId>` | Clear text from element |
-| `MAUI screenshot [--output path.png]` | PNG screenshot |
+| `MAUI screenshot [--output path.png] [--window W] [--id ID] [--selector SEL]` | PNG screenshot. Capture full window or a specific element by ID/selector. Window is 0-based index; default first window |
 | `MAUI property <elementId> <prop>` | Read property (Text, IsVisible, FontSize, etc.) |
 | `MAUI set-property <elementId> <prop> <value>` | Set property (live editing — colors, text, sizes, etc.) |
 | `MAUI element <elementId>` | Full element JSON (type, bounds, children, etc.) |
 | `MAUI navigate <route>` | Shell navigation (e.g. `//native`, `//blazor`) |
+| `MAUI scroll [--element id] [--dx N] [--dy N] [--window W]` | Scroll by delta or scroll element into view |
+| `MAUI focus <elementId>` | Set focus to element |
+| `MAUI resize <width> <height> [--window W]` | Resize app window. Window is 0-based index; default first window |
 | `MAUI logs [--limit N] [--skip N] [--source S]` | Fetch application logs (newest first). Source: native, webview, or omit for all |
 | `MAUI recording start [--output path] [--timeout 30]` | Start screen recording. Default timeout 30s. Uses platform-native tools (adb screenrecord, xcrun simctl, screencapture, ffmpeg) |
 | `MAUI recording stop` | Stop active recording and save the video file |
@@ -302,12 +328,30 @@ For detailed platform-specific setup, simulator/emulator management, and trouble
 - **Linux / GTK**: See [references/linux.md](references/linux.md)
 - **Troubleshooting**: See [references/troubleshooting.md](references/troubleshooting.md)
 
+## ⚠️ Non-Disruptive Operation
+
+**CRITICAL:** Never run commands that steal focus, move windows, simulate mouse/keyboard input,
+or otherwise disrupt the user's desktop. The user is likely working on the same computer.
+
+**Never use:**
+- `osascript` to focus/activate windows, click UI elements, or send keystrokes
+- `screencapture` interactively (the MauiDevFlow screenshot command captures in-process instead)
+- `xdotool` focus/activate/key commands that affect the active window
+- Any command that moves the mouse cursor or simulates input at the OS level
+- `open -a` to bring apps to the foreground (use `open` only to launch, not to focus)
+
+**Instead:** All inspection and interaction goes through `maui-devflow` CLI commands, which
+communicate with the in-app agent over HTTP — no foreground focus required. If you need
+something that would require OS-level control (e.g., dismissing a system dialog outside the
+app), **ask the user** to do it manually rather than attempting automation that would hijack
+their input.
+
 ## Tips
 
 - **Use `maui-devflow batch`** for multi-step interactions — resolves port once, adds delays,
   returns structured JSONL. See [references/batch.md](references/batch.md).
 - **Always use `maui-devflow MAUI screenshot`** — captures in-process, app does NOT need
-  foreground focus. Never use `osascript` to bring windows forward for screenshots.
+  foreground focus.
 - Use `AutomationId` on important MAUI controls for stable element references.
 - For Blazor Hybrid, `cdp snapshot` is the most AI-friendly way to read page state.
 - Port discovery, multi-project setup, and custom ports: see [references/setup.md](references/setup.md#3b-port-configuration).

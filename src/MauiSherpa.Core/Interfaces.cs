@@ -6,6 +6,7 @@ public interface IAlertService
 {
     Task ShowAlertAsync(string title, string message, string? cancel = null);
     Task<bool> ShowConfirmAsync(string title, string message, string? confirm = null, string? cancel = null);
+    Task<string?> ShowActionSheetAsync(string title, string? cancel, string? destruction, params string[] buttons);
     Task ShowToastAsync(string message);
 }
 

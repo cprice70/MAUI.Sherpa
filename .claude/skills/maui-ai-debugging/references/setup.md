@@ -322,8 +322,19 @@ dotnet tool update --global Redth.MauiDevFlow.CLI
 
 ### Update the skill
 ```bash
+# Check if the skill is up to date (compares local commit SHA against remote)
+maui-devflow skill-version
+
+# Download the latest skill files from GitHub
 maui-devflow update-skill
 ```
+
+The `update-skill` command writes a `.skill-version` file tracking the installed commit SHA.
+The `skill-version` command reads this file and compares against the latest remote commit.
+
+**AI agents should check at session start:** If `.claude/skills/maui-ai-debugging/.skill-version`
+exists, run `maui-devflow skill-version` to see if an update is available. If the remote SHA
+differs from the installed SHA, ask the user if they'd like to update before proceeding.
 
 ### Check NuGet packages in the project
 ```bash

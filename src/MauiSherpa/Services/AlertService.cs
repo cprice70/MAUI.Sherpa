@@ -23,6 +23,15 @@ public class AlertService : MauiSherpa.Core.Interfaces.IAlertService
             cancel ?? "No");
     }
 
+    public async Task<string?> ShowActionSheetAsync(string title, string? cancel, string? destruction, params string[] buttons)
+    {
+        return await Application.Current!.Windows[0].Page!.DisplayActionSheet(
+            title,
+            cancel,
+            destruction,
+            buttons);
+    }
+
     public Task ShowToastAsync(string message)
     {
         // Avoid MainThread Essentials static API on Linux GTK; use MAUI dispatcher directly.
