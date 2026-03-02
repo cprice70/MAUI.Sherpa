@@ -138,6 +138,9 @@ public static class MacOSMauiProgram
         builder.Services.AddSingleton<ISecretsPublisherFactory, SecretsPublisherFactory>();
         builder.Services.AddSingleton<ISecretsPublisherService, SecretsPublisherService>();
 
+        // Publish Profiles
+        builder.Services.AddSingleton<IPublishProfileService, PublishProfileService>();
+
         // Encrypted Settings services
         builder.Services.AddSingleton<IEncryptedSettingsService, EncryptedSettingsService>();
         builder.Services.AddSingleton<IBackupService, BackupService>();

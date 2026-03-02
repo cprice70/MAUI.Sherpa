@@ -2556,6 +2556,74 @@ public interface ISecretsPublisherService
 }
 
 // ============================================================================
+// Publish Profiles — Reusable publishing configurations
+// ============================================================================
+
+/// <summary>
+/// A reusable publishing configuration that bundles Apple, Android, and secret items
+/// </summary>
+public record PublishProfile(
+    string Id,
+    string Name,
+    string? Description,
+    string? PublisherId,
+    string? RepositoryId,
+    string? RepositoryFullName,
+    List<PublishProfileAppleConfig> AppleConfigs,
+    List<PublishProfileAndroidConfig> AndroidConfigs,
+    List<PublishProfileSecretMapping> SecretMappings,
+    DateTime CreatedAt,
+    DateTime UpdatedAt
+);
+
+/// <summary>
+/// Apple config within a publish profile. All items are optional —
+/// include any combination of certificate, profile, notarization.
+/// </summary>
+public record PublishProfileAppleConfig(
+    string Label,
+    string? CertificateSerialNumber,
+    string? InstallerCertSerialNumber,
+    string? ProfileId,
+    string? ProfileUuid,
+    bool IncludeNotarization,
+    Dictionary<string, List<string>> KeyMappings
+);
+
+/// <summary>
+/// Android config within a publish profile. Keystore is optional.
+/// </summary>
+public record PublishProfileAndroidConfig(
+    string Label,
+    string? KeystoreId,
+    Dictionary<string, List<string>> KeyMappings
+);
+
+/// <summary>
+/// Maps a managed secret to one or more destination key names
+/// </summary>
+public record PublishProfileSecretMapping(
+    string SourceKey,
+    List<string> DestinationKeys
+);
+
+/// <summary>
+/// Service for managing publish profiles
+/// </summary>
+public interface IPublishProfileService
+{
+    Task<IReadOnlyList<PublishProfile>> GetProfilesAsync();
+    Task<PublishProfile?> GetProfileAsync(string id);
+    Task SaveProfileAsync(PublishProfile profile);
+    Task DeleteProfileAsync(string id);
+    Task<Dictionary<string, string>> ResolveSecretsAsync(
+        PublishProfile profile,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default);
+    event Action? OnProfilesChanged;
+}
+
+// ============================================================================
 // Encrypted Settings Storage
 // ============================================================================
 
@@ -2653,6 +2721,7 @@ public record MauiSherpaSettings
     public AppPreferences Preferences { get; init; } = new();
     public PushTestingSettings PushTesting { get; init; } = new();
     public List<PushProject> PushProjects { get; init; } = new();
+    public List<PublishProfileData> PublishProfiles { get; init; } = new();
     public DateTime LastModified { get; init; } = DateTime.UtcNow;
 }
 
@@ -2686,6 +2755,18 @@ public record GoogleIdentityData(
     string ProjectId,
     string ClientEmail,
     string? ServiceAccountJson
+);
+
+public record PublishProfileData(
+    string Id,
+    string Name,
+    string? Description,
+    string? PublisherId,
+    string? RepositoryId,
+    string? RepositoryFullName,
+    List<PublishProfileAppleConfig> AppleConfigs,
+    List<PublishProfileAndroidConfig> AndroidConfigs,
+    List<PublishProfileSecretMapping> SecretMappings
 );
 
 public record AppPreferences
@@ -2746,6 +2827,7 @@ public record BackupExportSelection
     public List<string> SecretsPublisherIds { get; init; } = new();
     public List<string> GoogleIdentityIds { get; init; } = new();
     public List<string> PushProjectIds { get; init; } = new();
+    public List<string> PublishProfileIds { get; init; } = new();
 }
 
 public record BackupImportResult(

@@ -516,6 +516,22 @@
         overscroll-behavior-x: none;
     }
 
+    /* Auto-hide scrollbar on macOS (matches native behavior) */
+    .platform-macos ::-webkit-scrollbar {
+        width: 8px;
+        background: transparent;
+    }
+    .platform-macos ::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: 4px;
+    }
+    .platform-macos:hover ::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.15);
+    }
+    .theme-dark.platform-macos:hover ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
     /* No gradient fade on macOS — native window background shows through */
     .platform-macos .content::before {
         display: none;

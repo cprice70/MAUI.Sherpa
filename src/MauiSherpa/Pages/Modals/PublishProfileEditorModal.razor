@@ -1,0 +1,1293 @@
+@page "/modal/publish-profile-editor"
+@using MauiSherpa.Core.Interfaces
+@using MauiSherpa.Core.Requests.Apple
+@using MauiSherpa.Pages.Forms
+@using Shiny.Mediator
+@inject HybridFormBridgeHolder BridgeHolder
+@inject IAppleConnectService AppleService
+@inject IAppleIdentityService AppleIdentityService
+@inject IKeystoreService KeystoreService
+@inject IManagedSecretsService ManagedSecrets
+@inject ISecretsPublisherService PublisherService
+@inject IMediator Mediator
+@implements IDisposable
+
+<div class="profile-editor">
+    <!-- Tabs -->
+    <div class="editor-tabs">
+        <button class="editor-tab @(activeTab == "general" ? "active" : "")"
+                @onclick="@(() => activeTab = "general")">
+            <i class="fa-solid fa-gear"></i> General
+        </button>
+        <button class="editor-tab @(activeTab == "apple" ? "active" : "")"
+                @onclick="@(() => activeTab = "apple")">
+            <i class="fa-brands fa-apple"></i> Apple
+        </button>
+        <button class="editor-tab @(activeTab == "android" ? "active" : "")"
+                @onclick="@(() => activeTab = "android")">
+            <i class="fa-brands fa-android"></i> Android
+        </button>
+        <button class="editor-tab @(activeTab == "secrets" ? "active" : "")"
+                @onclick="@(() => activeTab = "secrets")">
+            <i class="fa-solid fa-key"></i> Secrets
+        </button>
+    </div>
+
+    <!-- Tab content -->
+    <div class="tab-content">
+        @if (activeTab == "general")
+        {
+            <div class="form-content">
+                <div class="form-group">
+                    <label>Profile Name</label>
+                    <input type="text" class="form-control" @bind="profileName" @bind:event="oninput"
+                           @bind:after="ValidateForm" placeholder="e.g., My App - Production" />
+                </div>
+                <div class="form-group">
+                    <label>Description <span class="optional">(optional)</span></label>
+                    <input type="text" class="form-control" @bind="profileDescription" @bind:event="oninput"
+                           placeholder="Brief description of this profile" />
+                </div>
+                <div class="form-group">
+                    <label>Default Publisher <span class="optional">(optional)</span></label>
+                    <div class="form-hint">Choose a default CI/CD provider and repo for one-click publishing</div>
+                    @if (publishers.Any())
+                    {
+                        <select class="form-control" @bind="selectedPublisherId">
+                            <option value="">— Choose at publish time —</option>
+                            @foreach (var pub in publishers)
+                            {
+                                <option value="@pub.Id">@pub.Name (@pub.ProviderId)</option>
+                            }
+                        </select>
+
+                        @if (!string.IsNullOrEmpty(selectedPublisherId))
+                        {
+                            <div class="repo-picker" style="margin-top: 8px;">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" @bind="repoSearch" @bind:event="oninput"
+                                           placeholder="Search repositories..." />
+                                    @if (!string.IsNullOrEmpty(repoSearch))
+                                    {
+                                        <button class="clear-search" @onclick="@(() => { repoSearch = ""; })">×</button>
+                                    }
+                                </div>
+                                @if (loadingRepos)
+                                {
+                                    <div class="loading-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading repos...</div>
+                                }
+                                else if (filteredRepos.Any())
+                                {
+                                    <div class="selection-list compact">
+                                        @foreach (var repo in filteredRepos.Take(20))
+                                        {
+                                            <label class="selection-item @(selectedRepoId == repo.Id ? "selected" : "")">
+                                                <input type="radio" name="repo" checked="@(selectedRepoId == repo.Id)"
+                                                       @onchange="@(() => { selectedRepoId = repo.Id; selectedRepoFullName = repo.FullName; ValidateForm(); })" />
+                                                <div class="item-content">
+                                                    <div class="item-name">@repo.FullName</div>
+                                                    @if (!string.IsNullOrEmpty(repo.Description))
+                                                    {
+                                                        <div class="item-detail">@repo.Description</div>
+                                                    }
+                                                </div>
+                                            </label>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="form-hint text-muted">No publishers configured. Configure in Settings first.</div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (activeTab == "apple")
+        {
+            <div class="form-content">
+                <div class="section-header">
+                    <span>Apple Configurations</span>
+                    <button class="btn-action small" @onclick="AddAppleConfig">
+                        <i class="fa-solid fa-plus"></i> Add Config
+                    </button>
+                </div>
+
+                @if (!appleConfigs.Any())
+                {
+                    <div class="empty-state">
+                        <i class="fa-brands fa-apple"></i>
+                        <p>No Apple configurations yet</p>
+                        <button class="btn-action small" @onclick="AddAppleConfig">Add Apple Config</button>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var config in appleConfigs)
+                    {
+                        <div class="config-card">
+                            <div class="config-header">
+                                <input type="text" class="config-label-input" @bind="config.Label" @bind:event="oninput"
+                                       placeholder="e.g., AdHoc, AppStore" />
+                                <button class="btn-icon-action danger" @onclick="@(() => appleConfigs.Remove(config))"
+                                        title="Remove config">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                            <div class="config-body">
+                                <!-- Signing Certificate -->
+                                <div class="config-item">
+                                    <label class="config-toggle">
+                                        <input type="checkbox" checked="@(!string.IsNullOrEmpty(config.CertificateSerialNumber))"
+                                               @onchange="@(e => { if (!(bool)(e.Value ?? false)) config.CertificateSerialNumber = null; })" />
+                                        <span>Signing Certificate</span>
+                                    </label>
+                                    @if (!string.IsNullOrEmpty(config.CertificateSerialNumber) || config.ShowCertPicker)
+                                    {
+                                        <select class="form-control compact" @bind="config.CertificateSerialNumber">
+                                            <option value="">— Select —</option>
+                                            @foreach (var cert in certificates.Where(c => IsSigningCertType(c.CertificateType) && c.ExpirationDate > DateTime.UtcNow))
+                                            {
+                                                <option value="@cert.SerialNumber">@cert.Name (@cert.CertificateType)</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+
+                                <!-- Installer Certificate -->
+                                <div class="config-item">
+                                    <label class="config-toggle">
+                                        <input type="checkbox" checked="@(!string.IsNullOrEmpty(config.InstallerCertSerialNumber))"
+                                               @onchange="@(e => { if (!(bool)(e.Value ?? false)) config.InstallerCertSerialNumber = null; })" />
+                                        <span>Installer Certificate</span>
+                                    </label>
+                                    @if (!string.IsNullOrEmpty(config.InstallerCertSerialNumber) || config.ShowInstallerPicker)
+                                    {
+                                        <select class="form-control compact" @bind="config.InstallerCertSerialNumber">
+                                            <option value="">— Select —</option>
+                                            @foreach (var cert in certificates.Where(c => c.CertificateType.Contains("INSTALLER", StringComparison.OrdinalIgnoreCase) && c.ExpirationDate > DateTime.UtcNow))
+                                            {
+                                                <option value="@cert.SerialNumber">@cert.Name (@cert.CertificateType)</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+
+                                <!-- Provisioning Profile -->
+                                <div class="config-item">
+                                    <label class="config-toggle">
+                                        <input type="checkbox" checked="@(!string.IsNullOrEmpty(config.ProfileId))"
+                                               @onchange="@(e => { if (!(bool)(e.Value ?? false)) { config.ProfileId = null; config.ProfileUuid = null; } })" />
+                                        <span>Provisioning Profile</span>
+                                    </label>
+                                    @if (!string.IsNullOrEmpty(config.ProfileId) || config.ShowProfilePicker)
+                                    {
+                                        <select class="form-control compact" @bind="config.ProfileId"
+                                                @bind:after="@(() => { var p = profiles.FirstOrDefault(pp => pp.Id == config.ProfileId); config.ProfileUuid = p?.Uuid; })">
+                                            <option value="">— Select —</option>
+                                            @foreach (var profile in profiles.Where(p => p.State == "ACTIVE"))
+                                            {
+                                                <option value="@profile.Id">@profile.Name (@profile.ProfileType)</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+
+                                <!-- Notarization -->
+                                <div class="config-item">
+                                    <label class="config-toggle">
+                                        <input type="checkbox" @bind="config.IncludeNotarization" />
+                                        <span>Include Notarization Credentials</span>
+                                    </label>
+                                </div>
+
+                                <!-- Key Mappings -->
+                                @if (config.HasAnyItems)
+                                {
+                                    <details class="key-mappings-section">
+                                        <summary><i class="fa-solid fa-key"></i> Key Mappings (@config.GetDefaultKeys().Count keys)</summary>
+                                        <div class="key-mappings">
+                                            @foreach (var defaultKey in config.GetDefaultKeys())
+                                            {
+                                                <div class="key-mapping-row">
+                                                    <div class="key-label">@defaultKey</div>
+                                                    <div class="key-destinations">
+                                                        @{
+                                                            var destinations = config.KeyMappings.GetValueOrDefault(defaultKey) ?? new List<string>();
+                                                        }
+                                                        @foreach (var dest in destinations)
+                                                        {
+                                                            <div class="destination-chip">
+                                                                <input type="text" class="dest-input" value="@dest"
+                                                                       @onchange="@(e => UpdateDestination(config.KeyMappings, defaultKey, dest, e.Value?.ToString() ?? ""))" />
+                                                                @if (destinations.Count > 1)
+                                                                {
+                                                                    <button class="chip-remove" @onclick="@(() => RemoveDestination(config.KeyMappings, defaultKey, dest))">×</button>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        <button class="btn-add-dest" @onclick="@(() => AddDestination(config.KeyMappings, defaultKey))"
+                                                                title="Add another destination">
+                                                            <i class="fa-solid fa-plus"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (activeTab == "android")
+        {
+            <div class="form-content">
+                <div class="section-header">
+                    <span>Android Configurations</span>
+                    <button class="btn-action small" @onclick="AddAndroidConfig">
+                        <i class="fa-solid fa-plus"></i> Add Config
+                    </button>
+                </div>
+
+                @if (!androidConfigs.Any())
+                {
+                    <div class="empty-state">
+                        <i class="fa-brands fa-android"></i>
+                        <p>No Android configurations yet</p>
+                        <button class="btn-action small" @onclick="AddAndroidConfig">Add Android Config</button>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var config in androidConfigs)
+                    {
+                        <div class="config-card">
+                            <div class="config-header">
+                                <input type="text" class="config-label-input" @bind="config.Label" @bind:event="oninput"
+                                       placeholder="e.g., PlayStore, Debug" />
+                                <button class="btn-icon-action danger" @onclick="@(() => androidConfigs.Remove(config))"
+                                        title="Remove config">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                            <div class="config-body">
+                                <!-- Keystore -->
+                                <div class="config-item">
+                                    <label class="config-toggle">
+                                        <input type="checkbox" checked="@(!string.IsNullOrEmpty(config.KeystoreId))"
+                                               @onchange="@(e => { if (!(bool)(e.Value ?? false)) config.KeystoreId = null; })" />
+                                        <span>Keystore</span>
+                                    </label>
+                                    @if (!string.IsNullOrEmpty(config.KeystoreId) || config.ShowKeystorePicker)
+                                    {
+                                        <select class="form-control compact" @bind="config.KeystoreId">
+                                            <option value="">— Select —</option>
+                                            @foreach (var ks in keystores)
+                                            {
+                                                <option value="@ks.Id">@ks.Alias (@ks.KeystoreType)</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+
+                                <!-- Key Mappings -->
+                                @if (config.HasAnyItems)
+                                {
+                                    <details class="key-mappings-section">
+                                        <summary><i class="fa-solid fa-key"></i> Key Mappings (@config.GetDefaultKeys().Count keys)</summary>
+                                        <div class="key-mappings">
+                                            @foreach (var defaultKey in config.GetDefaultKeys())
+                                            {
+                                                <div class="key-mapping-row">
+                                                    <div class="key-label">@defaultKey</div>
+                                                    <div class="key-destinations">
+                                                        @{
+                                                            var destinations = config.KeyMappings.GetValueOrDefault(defaultKey) ?? new List<string>();
+                                                        }
+                                                        @foreach (var dest in destinations)
+                                                        {
+                                                            <div class="destination-chip">
+                                                                <input type="text" class="dest-input" value="@dest"
+                                                                       @onchange="@(e => UpdateDestination(config.KeyMappings, defaultKey, dest, e.Value?.ToString() ?? ""))" />
+                                                                @if (destinations.Count > 1)
+                                                                {
+                                                                    <button class="chip-remove" @onclick="@(() => RemoveDestination(config.KeyMappings, defaultKey, dest))">×</button>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        <button class="btn-add-dest" @onclick="@(() => AddDestination(config.KeyMappings, defaultKey))"
+                                                                title="Add another destination">
+                                                            <i class="fa-solid fa-plus"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (activeTab == "secrets")
+        {
+            <div class="form-content">
+                <div class="section-header">
+                    <span>Secret Mappings</span>
+                    <button class="btn-action small" @onclick="@(() => showSecretPicker = true)">
+                        <i class="fa-solid fa-plus"></i> Add Secret
+                    </button>
+                </div>
+
+                @if (showSecretPicker)
+                {
+                    <div class="secret-picker-card">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" @bind="secretSearch" @bind:event="oninput" placeholder="Search managed secrets..." />
+                            @if (!string.IsNullOrEmpty(secretSearch))
+                            {
+                                <button class="clear-search" @onclick="@(() => secretSearch = "")">×</button>
+                            }
+                        </div>
+                        <div class="selection-list compact">
+                            @foreach (var secret in filteredManagedSecrets)
+                            {
+                                <label class="selection-item" @onclick="@(() => AddSecretMapping(secret.Key))">
+                                    <div class="item-content">
+                                        <div class="item-name mono">@secret.Key</div>
+                                        @if (!string.IsNullOrEmpty(secret.Description))
+                                        {
+                                            <div class="item-detail">@secret.Description</div>
+                                        }
+                                    </div>
+                                </label>
+                            }
+                            @if (!filteredManagedSecrets.Any())
+                            {
+                                <div class="empty-hint">No matching secrets</div>
+                            }
+                        </div>
+                        <button class="btn-text" @onclick="@(() => showSecretPicker = false)">Cancel</button>
+                    </div>
+                }
+
+                @if (!secretMappings.Any() && !showSecretPicker)
+                {
+                    <div class="empty-state">
+                        <i class="fa-solid fa-key"></i>
+                        <p>No secret mappings yet</p>
+                        <button class="btn-action small" @onclick="@(() => showSecretPicker = true)">Add Secret Mapping</button>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var mapping in secretMappings)
+                    {
+                        <div class="config-card">
+                            <div class="config-header">
+                                <span class="mono">@mapping.SourceKey</span>
+                                <button class="btn-icon-action danger" @onclick="@(() => secretMappings.Remove(mapping))"
+                                        title="Remove mapping">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                            <div class="config-body">
+                                <div class="key-mapping-row">
+                                    <div class="key-label">Destination keys:</div>
+                                    <div class="key-destinations">
+                                        @foreach (var dest in mapping.DestinationKeys)
+                                        {
+                                            <div class="destination-chip">
+                                                <input type="text" class="dest-input" value="@dest"
+                                                       @onchange="@(e => { var idx = mapping.DestinationKeys.IndexOf(dest); if (idx >= 0) mapping.DestinationKeys[idx] = e.Value?.ToString() ?? ""; })" />
+                                                @if (mapping.DestinationKeys.Count > 1)
+                                                {
+                                                    <button class="chip-remove" @onclick="@(() => mapping.DestinationKeys.Remove(dest))">×</button>
+                                                }
+                                            </div>
+                                        }
+                                        <button class="btn-add-dest" @onclick="@(() => mapping.DestinationKeys.Add(mapping.SourceKey + "_" + (mapping.DestinationKeys.Count + 1)))"
+                                                title="Add another destination">
+                                            <i class="fa-solid fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .profile-editor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 0 4px;
+    }
+
+    .editor-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+        background: var(--bg-tertiary, #e2e8f0);
+        padding: 4px;
+        border-radius: 0.75rem;
+        flex-shrink: 0;
+    }
+
+    .editor-tab {
+        flex: 1;
+        padding: 10px 14px;
+        border: none;
+        background: transparent;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .editor-tab:hover {
+        color: var(--text-primary);
+        background: var(--bg-secondary, rgba(0,0,0,0.03));
+    }
+
+    .editor-tab.active {
+        background: var(--card-bg, #fff);
+        color: var(--text-primary);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .tab-content {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+    }
+
+    .form-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .form-group label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .form-group .optional {
+        font-weight: 400;
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+
+    .form-control {
+        padding: 8px 12px;
+        border: 1px solid var(--border-color, #d1d5db);
+        border-radius: 0.375rem;
+        font-size: 13px;
+        background: var(--input-bg, #fff);
+        color: var(--text-primary);
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .form-control:focus {
+        border-color: var(--accent-color, #3b82f6);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .form-control.compact {
+        padding: 6px 10px;
+        font-size: 12px;
+        margin-top: 4px;
+    }
+
+    select.form-control {
+        cursor: pointer;
+    }
+
+    .form-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 4px;
+    }
+
+    .section-header span {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .btn-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: var(--accent-color, #3b82f6);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .btn-action:hover {
+        opacity: 0.9;
+    }
+
+    .btn-action.small {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    .btn-text {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+
+    .btn-text:hover {
+        color: var(--text-primary);
+    }
+
+    .btn-icon-action {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 0.25rem;
+        color: var(--text-muted);
+        transition: all 0.15s;
+    }
+
+    .btn-icon-action:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
+
+    .btn-icon-action.danger:hover {
+        color: var(--danger-color, #ef4444);
+    }
+
+    /* Config card */
+    .config-card {
+        background: var(--card-bg, #fff);
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+
+    .config-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        background: var(--bg-secondary, #f8f9fa);
+        gap: 8px;
+    }
+
+    .config-label-input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        outline: none;
+        padding: 2px 4px;
+        border-radius: 0.25rem;
+    }
+
+    .config-label-input:focus {
+        background: var(--input-bg, #fff);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    }
+
+    .config-label-input::placeholder {
+        color: var(--text-muted);
+        font-weight: 400;
+    }
+
+    .config-body {
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .config-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .config-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        color: var(--text-primary);
+    }
+
+    .config-toggle input[type="checkbox"] {
+        accent-color: var(--accent-color, #3b82f6);
+    }
+
+    /* Key mappings */
+    .key-mappings-section {
+        margin-top: 4px;
+    }
+
+    .key-mappings-section summary {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .key-mappings-section summary:hover {
+        color: var(--text-primary);
+    }
+
+    .key-mappings {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .key-mapping-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .key-label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        font-family: monospace;
+    }
+
+    .key-destinations {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+    }
+
+    .destination-chip {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        background: var(--bg-tertiary, #e2e8f0);
+        border-radius: 0.375rem;
+        padding: 2px 4px;
+    }
+
+    .dest-input {
+        border: none;
+        background: transparent;
+        font-size: 11px;
+        font-family: monospace;
+        color: var(--text-primary);
+        outline: none;
+        padding: 3px 4px;
+        min-width: 120px;
+    }
+
+    .dest-input:focus {
+        background: var(--input-bg, #fff);
+        border-radius: 0.25rem;
+    }
+
+    .chip-remove {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 14px;
+        padding: 0 4px;
+        line-height: 1;
+    }
+
+    .chip-remove:hover {
+        color: var(--danger-color, #ef4444);
+    }
+
+    .btn-add-dest {
+        background: none;
+        border: 1px dashed var(--border-color, #d1d5db);
+        border-radius: 0.375rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px 8px;
+        font-size: 11px;
+        transition: all 0.15s;
+    }
+
+    .btn-add-dest:hover {
+        border-color: var(--accent-color, #3b82f6);
+        color: var(--accent-color, #3b82f6);
+    }
+
+    /* Empty state */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+        color: var(--text-muted);
+        gap: 8px;
+    }
+
+    .empty-state i {
+        font-size: 32px;
+        opacity: 0.4;
+    }
+
+    .empty-state p {
+        margin: 0;
+        font-size: 13px;
+    }
+
+    /* Search box */
+    .search-box {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 10px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 8px 30px 8px 32px;
+        border: 1px solid var(--border-color, #d1d5db);
+        border-radius: 0.375rem;
+        font-size: 13px;
+        background: var(--input-bg, #fff);
+        color: var(--text-primary);
+        outline: none;
+    }
+
+    .search-box input:focus {
+        border-color: var(--accent-color, #3b82f6);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .clear-search {
+        position: absolute;
+        right: 8px;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    /* Selection list */
+    .selection-list {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color, #d1d5db);
+        border-radius: 0.75rem;
+        margin-top: 8px;
+    }
+
+    .selection-list.compact {
+        max-height: 160px;
+    }
+
+    .selection-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: background 0.1s;
+        border-bottom: 1px solid var(--border-color-light, #f1f5f9);
+    }
+
+    .selection-item:last-child {
+        border-bottom: none;
+    }
+
+    .selection-item:hover {
+        background: var(--bg-secondary, #f8f9fa);
+    }
+
+    .selection-item.selected {
+        background: var(--accent-bg, rgba(59, 130, 246, 0.08));
+    }
+
+    .selection-item input[type="radio"] {
+        margin-top: 2px;
+        accent-color: var(--accent-color, #3b82f6);
+    }
+
+    .item-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .item-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .item-detail {
+        font-size: 12px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .mono {
+        font-family: monospace;
+    }
+
+    /* Secret picker */
+    .secret-picker-card {
+        background: var(--card-bg, #fff);
+        border-radius: 0.75rem;
+        padding: 12px;
+    }
+
+    .loading-hint {
+        padding: 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    .empty-hint {
+        padding: 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    .repo-picker {
+        margin-top: 8px;
+    }
+
+    .text-muted {
+        color: var(--text-muted);
+    }
+</style>
+
+@code {
+    private string activeTab = "general";
+
+    // General
+    private string profileName = "";
+    private string profileDescription = "";
+    private string selectedPublisherId = "";
+    private string selectedRepoId = "";
+    private string selectedRepoFullName = "";
+    private string repoSearch = "";
+    private bool loadingRepos;
+    private string? existingProfileId;
+
+    // Apple
+    private List<AppleConfigVM> appleConfigs = new();
+    private List<AppleCertificate> certificates = new();
+    private List<AppleProfile> profiles = new();
+
+    // Android
+    private List<AndroidConfigVM> androidConfigs = new();
+    private List<AndroidKeystore> keystores = new();
+
+    // Secrets
+    private List<SecretMappingVM> secretMappings = new();
+    private List<ManagedSecret> managedSecrets = new();
+    private bool showSecretPicker;
+    private string secretSearch = "";
+
+    // Publishers
+    private List<SecretsPublisherConfig> publishers = new();
+    private List<PublisherRepository> repos = new();
+
+    private IEnumerable<PublisherRepository> filteredRepos =>
+        string.IsNullOrWhiteSpace(repoSearch)
+            ? repos
+            : repos.Where(r => r.FullName.Contains(repoSearch, StringComparison.OrdinalIgnoreCase)
+                || (r.Description?.Contains(repoSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    private IEnumerable<ManagedSecret> filteredManagedSecrets
+    {
+        get
+        {
+            var existingKeys = secretMappings.Select(m => m.SourceKey).ToHashSet();
+            var available = managedSecrets.Where(s => !existingKeys.Contains(s.Key));
+            return string.IsNullOrWhiteSpace(secretSearch)
+                ? available
+                : available.Where(s => s.Key.Contains(secretSearch, StringComparison.OrdinalIgnoreCase)
+                    || (s.Description?.Contains(secretSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var bridge = BridgeHolder.Current;
+        if (bridge is null) return;
+
+        bridge.SubmitRequested += OnSubmitRequested;
+
+        // Load existing profile if editing
+        if (bridge.Parameters.TryGetValue("Profile", out var profileObj) && profileObj is PublishProfile existing)
+        {
+            existingProfileId = existing.Id;
+            profileName = existing.Name;
+            profileDescription = existing.Description ?? "";
+            selectedPublisherId = existing.PublisherId ?? "";
+            selectedRepoId = existing.RepositoryId ?? "";
+            selectedRepoFullName = existing.RepositoryFullName ?? "";
+
+            appleConfigs = existing.AppleConfigs.Select(a => new AppleConfigVM
+            {
+                Label = a.Label,
+                CertificateSerialNumber = a.CertificateSerialNumber,
+                InstallerCertSerialNumber = a.InstallerCertSerialNumber,
+                ProfileId = a.ProfileId,
+                ProfileUuid = a.ProfileUuid,
+                IncludeNotarization = a.IncludeNotarization,
+                KeyMappings = a.KeyMappings.ToDictionary(k => k.Key, k => k.Value.ToList())
+            }).ToList();
+
+            androidConfigs = existing.AndroidConfigs.Select(a => new AndroidConfigVM
+            {
+                Label = a.Label,
+                KeystoreId = a.KeystoreId,
+                KeyMappings = a.KeyMappings.ToDictionary(k => k.Key, k => k.Value.ToList())
+            }).ToList();
+
+            secretMappings = existing.SecretMappings.Select(s => new SecretMappingVM
+            {
+                SourceKey = s.SourceKey,
+                DestinationKeys = s.DestinationKeys.ToList()
+            }).ToList();
+        }
+
+        ValidateForm();
+
+        // Load data in parallel
+        try
+        {
+            var publishersTask = PublisherService.GetPublishersAsync();
+            var keystoresTask = KeystoreService.ListKeystoresAsync();
+            var secretsTask = ManagedSecrets.ListAsync();
+
+            publishers = (await publishersTask).ToList();
+            keystores = (await keystoresTask).ToList();
+            managedSecrets = (await secretsTask).ToList();
+
+            // Load Apple data if an identity is available
+            var identities = await AppleIdentityService.GetIdentitiesAsync();
+            if (identities.Any())
+            {
+                var id = identities.First().Id;
+                try
+                {
+                    var certResult = await Mediator.Request(new GetCertificatesRequest(id));
+                    certificates = certResult.Result?.ToList() ?? new();
+                    var profileResult = await Mediator.Request(new GetProfilesRequest(id));
+                    profiles = profileResult.Result?.ToList() ?? new();
+                }
+                catch { }
+            }
+
+            // Load repos if publisher is selected
+            if (!string.IsNullOrEmpty(selectedPublisherId))
+                await LoadReposAsync();
+        }
+        catch { }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadReposAsync()
+    {
+        if (string.IsNullOrEmpty(selectedPublisherId)) return;
+        loadingRepos = true;
+        StateHasChanged();
+
+        try
+        {
+            repos = (await PublisherService.ListRepositoriesAsync(selectedPublisherId)).ToList();
+        }
+        catch { repos = new(); }
+
+        loadingRepos = false;
+        StateHasChanged();
+    }
+
+    private void ValidateForm()
+    {
+        var bridge = BridgeHolder.Current;
+        bridge?.SetValid(!string.IsNullOrWhiteSpace(profileName));
+    }
+
+    private Task OnSubmitRequested()
+    {
+        var bridge = BridgeHolder.Current;
+        if (bridge is null) return Task.CompletedTask;
+
+        var profile = new PublishProfile(
+            Id: existingProfileId ?? Guid.NewGuid().ToString(),
+            Name: profileName.Trim(),
+            Description: string.IsNullOrWhiteSpace(profileDescription) ? null : profileDescription.Trim(),
+            PublisherId: string.IsNullOrEmpty(selectedPublisherId) ? null : selectedPublisherId,
+            RepositoryId: string.IsNullOrEmpty(selectedRepoId) ? null : selectedRepoId,
+            RepositoryFullName: string.IsNullOrEmpty(selectedRepoFullName) ? null : selectedRepoFullName,
+            AppleConfigs: appleConfigs.Select(a => new PublishProfileAppleConfig(
+                a.Label,
+                a.CertificateSerialNumber,
+                a.InstallerCertSerialNumber,
+                a.ProfileId,
+                a.ProfileUuid,
+                a.IncludeNotarization,
+                a.KeyMappings.ToDictionary(k => k.Key, k => k.Value.ToList())
+            )).ToList(),
+            AndroidConfigs: androidConfigs.Select(a => new PublishProfileAndroidConfig(
+                a.Label,
+                a.KeystoreId,
+                a.KeyMappings.ToDictionary(k => k.Key, k => k.Value.ToList())
+            )).ToList(),
+            SecretMappings: secretMappings.Select(s => new PublishProfileSecretMapping(
+                s.SourceKey,
+                s.DestinationKeys.ToList()
+            )).ToList(),
+            CreatedAt: existingProfileId is not null
+                ? (BridgeHolder.Current?.Parameters.TryGetValue("Profile", out var p) == true && p is PublishProfile ep ? ep.CreatedAt : DateTime.UtcNow)
+                : DateTime.UtcNow,
+            UpdatedAt: DateTime.UtcNow
+        );
+
+        bridge.Result = profile;
+        return Task.CompletedTask;
+    }
+
+    // Apple helpers
+    private void AddAppleConfig()
+    {
+        appleConfigs.Add(new AppleConfigVM { Label = "AdHoc" });
+    }
+
+    private bool IsSigningCertType(string certType)
+        => certType.Contains("DISTRIBUTION", StringComparison.OrdinalIgnoreCase)
+           || certType.Contains("DEVELOPMENT", StringComparison.OrdinalIgnoreCase)
+           || certType.Contains("DEVELOPER_ID", StringComparison.OrdinalIgnoreCase);
+
+    // Android helpers
+    private void AddAndroidConfig()
+    {
+        androidConfigs.Add(new AndroidConfigVM { Label = "PlayStore" });
+    }
+
+    // Secrets helpers
+    private void AddSecretMapping(string sourceKey)
+    {
+        if (secretMappings.Any(m => m.SourceKey == sourceKey)) return;
+        secretMappings.Add(new SecretMappingVM
+        {
+            SourceKey = sourceKey,
+            DestinationKeys = new List<string> { sourceKey }
+        });
+        showSecretPicker = false;
+    }
+
+    // Key mapping helpers
+    private void AddDestination(Dictionary<string, List<string>> mappings, string defaultKey)
+    {
+        if (!mappings.ContainsKey(defaultKey))
+            mappings[defaultKey] = new List<string> { defaultKey };
+        mappings[defaultKey].Add(defaultKey + "_" + (mappings[defaultKey].Count + 1));
+    }
+
+    private void RemoveDestination(Dictionary<string, List<string>> mappings, string defaultKey, string dest)
+    {
+        if (mappings.TryGetValue(defaultKey, out var list))
+        {
+            list.Remove(dest);
+            if (list.Count == 0)
+                mappings.Remove(defaultKey);
+        }
+    }
+
+    private void UpdateDestination(Dictionary<string, List<string>> mappings, string defaultKey, string oldDest, string newDest)
+    {
+        if (mappings.TryGetValue(defaultKey, out var list))
+        {
+            var idx = list.IndexOf(oldDest);
+            if (idx >= 0 && !string.IsNullOrWhiteSpace(newDest))
+                list[idx] = newDest;
+        }
+    }
+
+    public void Dispose()
+    {
+        var bridge = BridgeHolder.Current;
+        if (bridge is not null)
+            bridge.SubmitRequested -= OnSubmitRequested;
+    }
+
+    // View models for mutable editing
+    private class AppleConfigVM
+    {
+        public string Label { get; set; } = "";
+        public string? CertificateSerialNumber { get; set; }
+        public string? InstallerCertSerialNumber { get; set; }
+        public string? ProfileId { get; set; }
+        public string? ProfileUuid { get; set; }
+        public bool IncludeNotarization { get; set; }
+        public Dictionary<string, List<string>> KeyMappings { get; set; } = new();
+
+        public bool ShowCertPicker => CertificateSerialNumber is null;
+        public bool ShowInstallerPicker => InstallerCertSerialNumber is null;
+        public bool ShowProfilePicker => ProfileId is null;
+
+        public bool HasAnyItems => !string.IsNullOrEmpty(CertificateSerialNumber)
+            || !string.IsNullOrEmpty(InstallerCertSerialNumber)
+            || !string.IsNullOrEmpty(ProfileId)
+            || IncludeNotarization;
+
+        public List<string> GetDefaultKeys()
+        {
+            var keys = new List<string>();
+            var label = Label.ToUpperInvariant().Replace(' ', '_').Replace('-', '_');
+            if (!string.IsNullOrEmpty(CertificateSerialNumber))
+            {
+                keys.Add($"APPLE_{label}_CERTIFICATE_P12");
+                keys.Add($"APPLE_{label}_CERTIFICATE_PASSWORD");
+            }
+            if (!string.IsNullOrEmpty(InstallerCertSerialNumber))
+            {
+                keys.Add($"APPLE_{label}_INSTALLER_CERTIFICATE_P12");
+                keys.Add($"APPLE_{label}_INSTALLER_CERTIFICATE_PASSWORD");
+            }
+            if (!string.IsNullOrEmpty(ProfileId))
+                keys.Add($"APPLE_{label}_PROVISIONING_PROFILE");
+            if (IncludeNotarization)
+            {
+                keys.Add("APPLE_NOTARIZATION_KEY_ID");
+                keys.Add("APPLE_NOTARIZATION_ISSUER_ID");
+                keys.Add("APPLE_NOTARIZATION_KEY_P8");
+            }
+
+            // Ensure all keys exist in mappings with default
+            foreach (var key in keys)
+            {
+                if (!KeyMappings.ContainsKey(key))
+                    KeyMappings[key] = new List<string> { key };
+            }
+
+            // Remove stale mappings
+            foreach (var k in KeyMappings.Keys.ToList())
+            {
+                if (!keys.Contains(k))
+                    KeyMappings.Remove(k);
+            }
+
+            return keys;
+        }
+    }
+
+    private class AndroidConfigVM
+    {
+        public string Label { get; set; } = "";
+        public string? KeystoreId { get; set; }
+        public Dictionary<string, List<string>> KeyMappings { get; set; } = new();
+
+        public bool ShowKeystorePicker => KeystoreId is null;
+
+        public bool HasAnyItems => !string.IsNullOrEmpty(KeystoreId);
+
+        public List<string> GetDefaultKeys()
+        {
+            var keys = new List<string>();
+            var label = Label.ToUpperInvariant().Replace(' ', '_').Replace('-', '_');
+            if (!string.IsNullOrEmpty(KeystoreId))
+            {
+                keys.Add($"ANDROID_{label}_KEYSTORE");
+                keys.Add($"ANDROID_{label}_KEYSTORE_PASSWORD");
+                keys.Add($"ANDROID_{label}_KEY_ALIAS");
+                keys.Add($"ANDROID_{label}_KEY_PASSWORD");
+            }
+
+            foreach (var key in keys)
+            {
+                if (!KeyMappings.ContainsKey(key))
+                    KeyMappings[key] = new List<string> { key };
+            }
+
+            foreach (var k in KeyMappings.Keys.ToList())
+            {
+                if (!keys.Contains(k))
+                    KeyMappings.Remove(k);
+            }
+
+            return keys;
+        }
+    }
+
+    private class SecretMappingVM
+    {
+        public string SourceKey { get; set; } = "";
+        public List<string> DestinationKeys { get; set; } = new();
+    }
+}

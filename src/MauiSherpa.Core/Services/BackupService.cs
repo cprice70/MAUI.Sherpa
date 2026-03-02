@@ -25,6 +25,7 @@ public class BackupService : IBackupService
     private readonly ISecretsPublisherService? _secretsPublisherService;
     private readonly IGoogleIdentityService? _googleIdentityService;
     private readonly IPushProjectService? _pushProjectService;
+    private readonly IPublishProfileService? _publishProfileService;
 
     private record BackupPayload(
         int Version,
@@ -38,7 +39,8 @@ public class BackupService : IBackupService
         ICloudSecretsService? cloudSecretsService = null,
         ISecretsPublisherService? secretsPublisherService = null,
         IGoogleIdentityService? googleIdentityService = null,
-        IPushProjectService? pushProjectService = null)
+        IPushProjectService? pushProjectService = null,
+        IPublishProfileService? publishProfileService = null)
     {
         _settingsService = settingsService;
         _appleIdentityService = appleIdentityService;
@@ -46,6 +48,7 @@ public class BackupService : IBackupService
         _secretsPublisherService = secretsPublisherService;
         _googleIdentityService = googleIdentityService;
         _pushProjectService = pushProjectService;
+        _publishProfileService = publishProfileService;
     }
 
     public async Task<byte[]> ExportSettingsAsync(string password, BackupExportSelection? selection = null)
@@ -60,7 +63,8 @@ public class BackupService : IBackupService
             resolvedSelection.CloudProviderIds.Count == 0 &&
             resolvedSelection.SecretsPublisherIds.Count == 0 &&
             resolvedSelection.GoogleIdentityIds.Count == 0 &&
-            resolvedSelection.PushProjectIds.Count == 0)
+            resolvedSelection.PushProjectIds.Count == 0 &&
+            resolvedSelection.PublishProfileIds.Count == 0)
         {
             throw new InvalidOperationException("At least one setting item must be selected for export.");
         }
@@ -205,7 +209,34 @@ public class BackupService : IBackupService
         settings = await HydrateSecretsPublishersAsync(settings);
         settings = await HydrateGoogleIdentitiesAsync(settings);
         settings = await HydratePushProjectsAsync(settings);
+        settings = await HydratePublishProfilesAsync(settings);
         return settings;
+    }
+
+    private async Task<MauiSherpaSettings> HydratePublishProfilesAsync(MauiSherpaSettings settings)
+    {
+        if (_publishProfileService is null)
+            return settings;
+
+        var profiles = await _publishProfileService.GetProfilesAsync();
+        if (profiles.Count == 0)
+            return settings;
+
+        return settings with
+        {
+            PublishProfiles = profiles
+                .Select(p => new PublishProfileData(
+                    Id: p.Id,
+                    Name: p.Name,
+                    Description: p.Description,
+                    PublisherId: p.PublisherId,
+                    RepositoryId: p.RepositoryId,
+                    RepositoryFullName: p.RepositoryFullName,
+                    AppleConfigs: p.AppleConfigs,
+                    AndroidConfigs: p.AndroidConfigs,
+                    SecretMappings: p.SecretMappings))
+                .ToList()
+        };
     }
 
     private async Task<MauiSherpaSettings> HydrateAppleIdentitiesAsync(MauiSherpaSettings settings)
@@ -330,6 +361,7 @@ public class BackupService : IBackupService
         var availablePublisherIds = settings.SecretsPublishers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
         var availableGoogleIds = settings.GoogleIdentities.Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
         var availablePushProjectIds = settings.PushProjects.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var availableProfileIds = settings.PublishProfiles.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
 
         if (selection is null)
         {
@@ -340,7 +372,8 @@ public class BackupService : IBackupService
                 CloudProviderIds = availableProviderIds.ToList(),
                 SecretsPublisherIds = availablePublisherIds.ToList(),
                 GoogleIdentityIds = availableGoogleIds.ToList(),
-                PushProjectIds = availablePushProjectIds.ToList()
+                PushProjectIds = availablePushProjectIds.ToList(),
+                PublishProfileIds = availableProfileIds.ToList()
             };
         }
 
@@ -349,6 +382,7 @@ public class BackupService : IBackupService
         var selectedPublisherIds = selection.SecretsPublisherIds ?? new List<string>();
         var selectedGoogleIds = selection.GoogleIdentityIds ?? new List<string>();
         var selectedPushProjectIds = selection.PushProjectIds ?? new List<string>();
+        var selectedProfileIds = selection.PublishProfileIds ?? new List<string>();
 
         return new BackupExportSelection
         {
@@ -372,6 +406,10 @@ public class BackupService : IBackupService
             PushProjectIds = selectedPushProjectIds
                 .Where(id => availablePushProjectIds.Contains(id))
                 .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            PublishProfileIds = selectedProfileIds
+                .Where(id => availableProfileIds.Contains(id))
+                .Distinct(StringComparer.Ordinal)
                 .ToList()
         };
     }
@@ -383,6 +421,7 @@ public class BackupService : IBackupService
         var selectedPublisherIds = selection.SecretsPublisherIds.ToHashSet(StringComparer.Ordinal);
         var selectedGoogleIds = selection.GoogleIdentityIds.ToHashSet(StringComparer.Ordinal);
         var selectedPushProjectIds = selection.PushProjectIds.ToHashSet(StringComparer.Ordinal);
+        var selectedProfileIds = selection.PublishProfileIds.ToHashSet(StringComparer.Ordinal);
 
         var cloudProviders = settings.CloudProviders
             .Where(provider => selectedProviderIds.Contains(provider.Id))
@@ -412,6 +451,9 @@ public class BackupService : IBackupService
                 .ToList(),
             PushProjects = settings.PushProjects
                 .Where(project => selectedPushProjectIds.Contains(project.Id))
+                .ToList(),
+            PublishProfiles = settings.PublishProfiles
+                .Where(profile => selectedProfileIds.Contains(profile.Id))
                 .ToList()
         };
     }
