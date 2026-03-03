@@ -11,12 +11,15 @@ public class SecureStorageService : ISecureStorageService
 {
     private readonly string _fallbackPath;
     private readonly ISecureStorage _secureStorage;
+    private readonly IAlertService? _alertService;
     private Dictionary<string, string>? _fallbackCache;
     private bool _usesFallback;
+    private bool _shownFallbackToast;
 
-    public SecureStorageService(ISecureStorage secureStorage)
+    public SecureStorageService(ISecureStorage secureStorage, IAlertService? alertService = null)
     {
         _secureStorage = secureStorage;
+        _alertService = alertService;
         _fallbackPath = Path.Combine(
             MauiSherpa.Core.Services.AppDataPath.GetAppDataDirectory(),
             ".secure-fallback.json");
@@ -42,13 +45,19 @@ public class SecureStorageService : ISecureStorageService
             }
             catch (Exception)
             {
-                // Keychain access denied - switch to fallback
+#if DEBUG
+                // Keychain access denied - switch to fallback (DEBUG only)
                 _usesFallback = true;
-                System.Diagnostics.Debug.WriteLine("SecureStorage unavailable, using fallback file storage");
+                ShowFallbackToast();
+#else
+                // In release builds, do NOT fall back to plaintext storage
+                System.Diagnostics.Debug.WriteLine("SecureStorage unavailable — refusing to fall back to plaintext in Release");
+                return null;
+#endif
             }
         }
 
-        // Fallback to file (either because SecureStorage failed, or key not found in SecureStorage)
+        // Fallback to file (DEBUG only, or migrating from previous fallback)
         await LoadFallbackCacheAsync();
         return _fallbackCache?.GetValueOrDefault(key);
     }
@@ -65,12 +74,17 @@ public class SecureStorageService : ISecureStorageService
             }
             catch (Exception)
             {
+#if DEBUG
                 _usesFallback = true;
-                System.Diagnostics.Debug.WriteLine("SecureStorage unavailable, using fallback file storage");
+                ShowFallbackToast();
+#else
+                System.Diagnostics.Debug.WriteLine("SecureStorage unavailable — refusing to fall back to plaintext in Release");
+                throw;
+#endif
             }
         }
 
-        // Fallback to file
+        // Fallback to file (DEBUG only)
         await LoadFallbackCacheAsync();
         _fallbackCache ??= new();
         _fallbackCache[key] = value;
@@ -89,7 +103,12 @@ public class SecureStorageService : ISecureStorageService
             }
             catch (Exception)
             {
+#if DEBUG
                 _usesFallback = true;
+                ShowFallbackToast();
+#else
+                return; // Silently fail in release — nothing to remove
+#endif
             }
         }
 
@@ -99,6 +118,14 @@ public class SecureStorageService : ISecureStorageService
         {
             await SaveFallbackCacheAsync();
         }
+    }
+
+    private void ShowFallbackToast()
+    {
+        if (_shownFallbackToast) return;
+        _shownFallbackToast = true;
+        System.Diagnostics.Debug.WriteLine("SecureStorage unavailable, using fallback file storage");
+        _ = _alertService?.ShowToastAsync("⚠️ SecureStorage unavailable — using plaintext fallback (DEBUG)");
     }
 
     private async Task LoadFallbackCacheAsync()

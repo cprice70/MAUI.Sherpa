@@ -940,12 +940,12 @@ else
                 }
                 else
                 {
-                    await AlertService.ShowAlertAsync("Fix Failed", $"Could not fix: {dep.Name}");
+                    await AlertService.ShowToastAsync($"Fix failed: {dep.Name}");
                 }
             }
             catch (Exception ex)
             {
-                await AlertService.ShowAlertAsync("Error", ex.Message);
+                await AlertService.ShowToastAsync($"Fix error: {ex.Message}");
             }
             finally
             {
@@ -965,7 +965,7 @@ else
         }
         else if (result != null && !result.WasCancelled && !result.WasKilled)
         {
-            await AlertService.ShowAlertAsync("Fix Failed", $"Could not fix: {dep.Name}. Check the output for details.");
+            await AlertService.ShowToastAsync($"Fix failed: {dep.Name}. Check the output for details.");
         }
     }
 
@@ -1004,7 +1004,7 @@ else
         }
         else if (result.FinalState != OperationState.Cancelled)
         {
-            await AlertService.ShowAlertAsync("Fix Failed", $"Could not fix: {dep.Name}. Check the log for details.");
+            await AlertService.ShowToastAsync($"Fix failed: {dep.Name}. Check the log for details.");
         }
     }
 
