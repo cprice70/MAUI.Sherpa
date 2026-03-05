@@ -1,10 +1,12 @@
 @page "/inspector/devflow/{AgentId}/{TabName?}"
 @using MauiSherpa.Core.Models.DevFlow
 @using MauiSherpa.Core.Services
+@using MauiSherpa.Core.Interfaces
 @using MauiSherpa.Services
 @layout MauiSherpa.Components.InspectorLayout
 @inject DevFlowInspectorService InspectorService
 @inject NavigationManager NavManager
+@inject IToolbarService ToolbarService
 @implements IDisposable
 
 <div class="devflow-inspector">
@@ -32,6 +34,9 @@
             </button>
             <button class="tab-btn @(activeTab == "logs" ? "active" : "")" @onclick='@(() => SwitchTab("logs"))'>
                 <i class="fas fa-scroll"></i> Logs
+            </button>
+            <button class="tab-btn refresh-btn" @onclick="ReconnectAsync" title="Reconnect to agent">
+                <i class="fas fa-arrows-rotate @(isReconnecting ? "fa-spin" : "")"></i>
             </button>
         </div>
     </div>
@@ -81,6 +86,7 @@
     private int agentPort = 9223;
     private string activeTab = "tree";
     private bool isConnected;
+    private bool isReconnecting;
 
     // Shared log state — stream lives at inspector level, survives tab switches
     private List<DevFlowLogEntry> allLogs = new();
@@ -100,8 +106,22 @@
         agentPort = QueryPort ?? 9223;
         activeTab = TabName ?? "tree";
 
+        ToolbarService.SetItems(
+            new ToolbarAction("refresh", "Refresh", "arrow.clockwise")
+        );
+        ToolbarService.ToolbarItemClicked += OnToolbarItemClicked;
+
         client = new DevFlowAgentClient(agentHost, agentPort);
         await ConnectAsync();
+    }
+
+    private void OnToolbarItemClicked(string actionId)
+    {
+        InvokeAsync(async () =>
+        {
+            if (actionId == "refresh")
+                await ReconnectAsync();
+        });
     }
 
     private async Task ConnectAsync()
@@ -119,6 +139,28 @@
 
         if (isConnected)
             StartLogStream();
+    }
+
+    private async Task ReconnectAsync()
+    {
+        if (isReconnecting) return;
+        isReconnecting = true;
+        StateHasChanged();
+
+        try
+        {
+            _logStreamCts?.Cancel();
+            _pollTimer?.Dispose();
+            _pollTimer = null;
+
+            client = new DevFlowAgentClient(agentHost, agentPort);
+            await ConnectAsync();
+        }
+        finally
+        {
+            isReconnecting = false;
+            StateHasChanged();
+        }
     }
 
     private void StartLogStream()
@@ -251,6 +293,8 @@
 
     public void Dispose()
     {
+        ToolbarService.ToolbarItemClicked -= OnToolbarItemClicked;
+        ToolbarService.ClearItems();
         _logStreamCts?.Cancel();
         _pollTimer?.Dispose();
         client?.Dispose();
@@ -332,6 +376,17 @@
     .tab-btn.active {
         color: var(--accent-color, #8b5cf6);
         border-bottom-color: var(--accent-color, #8b5cf6);
+    }
+
+    .tab-btn.refresh-btn {
+        margin-left: auto;
+        border-bottom: none;
+        color: var(--text-tertiary);
+        padding: 0.5rem 0.75rem;
+    }
+
+    .tab-btn.refresh-btn:hover {
+        color: var(--accent-color, #8b5cf6);
     }
 
     .inspector-content {

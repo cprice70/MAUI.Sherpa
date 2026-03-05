@@ -14,6 +14,11 @@
                         title="@(inspectMode ? "Exit inspect mode" : "Inspect element (click on screenshot)")">
                     <i class="fas fa-crosshairs"></i>
                 </button>
+                <button class="btn-icon @(hitTestDebug ? "inspect-active" : "")"
+                        @onclick="() => { hitTestDebug = !hitTestDebug; }"
+                        title="@(hitTestDebug ? "Hide hit test debug info" : "Show hit test debug info")">
+                    <i class="fas fa-bug"></i>
+                </button>
                 <select @bind="autoRefreshInterval" @bind:after="OnAutoRefreshChanged" class="auto-refresh-select">
                     <option value="0">Manual</option>
                     <option value="1">1s</option>
@@ -28,10 +33,10 @@
         <div class="screenshot-container">
             @if (screenshotData != null)
             {
-                <div class="screenshot-wrapper" @onclick="OnScreenshotClick" style="position: relative; display: inline-block;">
+                <div class="screenshot-wrapper" @onclick="OnScreenshotClick">
                     <img src="@($"data:image/png;base64,{screenshotData}")" alt="App screenshot"
                          class="screenshot-img @(inspectMode ? "inspect-cursor" : "")" />
-                    @if (locateElementId != null && selectedElement?.Bounds != null && screenshotData != null)
+                    @if (locateElementId != null && (selectedElement?.Bounds != null || selectedElement?.WindowBounds != null) && screenshotData != null)
                     {
                         @RenderHighlightOverlay
                     }
@@ -45,7 +50,16 @@
                 </div>
             }
         </div>
+        @if (hitTestDebug && hitTestDebugInfo != null)
+        {
+            <div class="hit-test-debug">
+                <span class="hit-test-text">@hitTestDebugInfo</span>
+                <button class="hit-test-copy" @onclick="CopyHitTestDebug" title="Copy"><i class="fas fa-copy"></i></button>
+            </div>
+        }
     </div>
+
+    <div class="resize-handle" @onmousedown="@(e => StartResize(e, "left"))" @onmousedown:preventDefault></div>
 
     <!-- Center: Tree View -->
     <div class="tree-view-pane">
@@ -140,6 +154,13 @@
                         <div class="prop-row">
                             <span class="prop-key">Size</span>
                             <span class="prop-value">@($"{selectedElement.Bounds.Width:F0} × {selectedElement.Bounds.Height:F0}")</span>
+                        </div>
+                    }
+                    @if (selectedElement.WindowBounds != null)
+                    {
+                        <div class="prop-row">
+                            <span class="prop-key">Window</span>
+                            <span class="prop-value">@($"{selectedElement.WindowBounds.X:F0}, {selectedElement.WindowBounds.Y:F0}  {selectedElement.WindowBounds.Width:F0} × {selectedElement.WindowBounds.Height:F0}")</span>
                         </div>
                     }
                 </div>
@@ -253,13 +274,14 @@
     private int autoRefreshInterval;
     private Timer? _screenshotTimer;
     private bool inspectMode;
-    private string? inspectDebug;
+    private bool hitTestDebug;
+    private string? hitTestDebugInfo;
+    private bool _syncingRefresh;
     private string? overlayStyle;
     private string? locateElementId;
     private string? editingProperty;
     private string editValue = "";
     private ElementReference editInput;
-    private HashSet<string> _activeShellItemIds = new();
     private List<PropertyEntry> fetchedProperties = new();
     private string customPropertyName = "";
     private List<GradientStop> gradientStops = new();
@@ -412,10 +434,11 @@
         }
     }
 
-    private void StopResize(MouseEventArgs e)
+    private async Task StopResize(MouseEventArgs e)
     {
         isResizing = false;
         resizingHandle = null;
+        await UpdateOverlayAsync();
     }
 
     protected override async Task OnInitializedAsync()
@@ -435,9 +458,6 @@
         {
             treeItems = await Client.GetTreeAsync();
 
-            // Detect active Shell page to filter hit tests
-            _activeShellItemIds = await DetectActiveShellItemIds(treeItems);
-
             // Always expand all nodes
             expandedNodes.Clear();
             AddAllNodeIds(treeItems);
@@ -455,6 +475,14 @@
         {
             isLoadingTree = false;
             StateHasChanged();
+        }
+
+        // Keep screenshot in sync with tree (avoid recursion via flag)
+        if (!_syncingRefresh)
+        {
+            _syncingRefresh = true;
+            try { await RefreshScreenshot(); }
+            finally { _syncingRefresh = false; }
         }
     }
 
@@ -479,44 +507,51 @@
             var bytes = await Client.GetScreenshotAsync(window: window ?? selectedWindowIndex);
             screenshotData = bytes != null ? Convert.ToBase64String(bytes) : null;
             StateHasChanged();
+            await UpdateOverlayAsync();
         }
         catch { }
+
+        // Keep tree in sync with screenshot (avoid recursion via flag)
+        if (!_syncingRefresh)
+        {
+            _syncingRefresh = true;
+            try { await RefreshTree(); }
+            finally { _syncingRefresh = false; }
+        }
     }
 
     // --- Inspect Mode: Screenshot click → element selection ---
 
-    private record ImageDimensions(double Width, double Height, double NaturalWidth, double NaturalHeight);
+    private record ImageDimensions(double Width, double Height, double NaturalWidth, double NaturalHeight, double Left, double Top);
+
+    private async Task CopyHitTestDebug()
+    {
+        if (hitTestDebugInfo != null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", hitTestDebugInfo);
+    }
 
     private async Task OnScreenshotClick(MouseEventArgs e)
     {
         if (!inspectMode || treeItems.Count == 0)
-        {
-            inspectDebug = $"Skip: inspectMode={inspectMode}, treeItems={treeItems.Count}";
-            StateHasChanged();
             return;
-        }
 
         try
         {
-            inspectDebug = $"Click at offset=({e.OffsetX:F0},{e.OffsetY:F0})";
-            StateHasChanged();
-
-            // Get image element and natural dimensions via JS
+            // Get image element dimensions and position via JS
             var dims = await JS.InvokeAsync<ImageDimensions>("eval",
                 "(function() { var img = document.querySelector('.screenshot-img');" +
                 "if (!img) return null;" +
                 "var r = img.getBoundingClientRect();" +
-                "return { width: r.width, height: r.height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight }; })()");
+                "return { width: r.width, height: r.height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, left: r.left, top: r.top }; })()");
 
             if (dims == null || dims.NaturalWidth <= 0 || dims.NaturalHeight <= 0)
             {
-                inspectDebug = $"No dims: {(dims == null ? "null" : $"natW={dims.NaturalWidth}")}";
-                StateHasChanged();
+                if (hitTestDebug) { hitTestDebugInfo = $"No dims: {(dims == null ? "null" : $"natW={dims.NaturalWidth}")}"; StateHasChanged(); }
                 return;
             }
 
-            // e.OffsetX/OffsetY are relative to the clicked element's border box
-            // Account for object-fit: contain letterboxing
+            // Use clientX/Y minus image rect to get position relative to the image element
+            // (e.OffsetX/Y can be relative to wrapper div instead of img, causing wrong coordinates)
             var imgAspect = dims.NaturalWidth / dims.NaturalHeight;
             var boxAspect = dims.Width / dims.Height;
             double actW, actH, offX, offY;
@@ -531,50 +566,58 @@
                 offX = (dims.Width - actW) / 2; offY = 0;
             }
 
-            // Click position within the actual image content
-            var mx = e.OffsetX - offX;
-            var my = e.OffsetY - offY;
+            // Click position within the actual image content, using clientX/Y for unambiguous mapping
+            var mx = e.ClientX - dims.Left - offX;
+            var my = e.ClientY - dims.Top - offY;
+
+            if (hitTestDebug)
+            {
+                hitTestDebugInfo = $"client=({e.ClientX:F0},{e.ClientY:F0}) imgRect=({dims.Left:F0},{dims.Top:F0},{dims.Width:F0}×{dims.Height:F0}) mx=({mx:F1},{my:F1}) actW={actW:F0} nat={dims.NaturalWidth:F0}×{dims.NaturalHeight:F0}";
+                StateHasChanged();
+            }
+
             if (mx < 0 || my < 0 || mx > actW || my > actH)
             {
-                inspectDebug = $"Outside: mx={mx:F0} my={my:F0} actW={actW:F0} actH={actH:F0}";
-                StateHasChanged();
+                if (hitTestDebug) { hitTestDebugInfo = $"Outside image: mx={mx:F0} my={my:F0} actW={actW:F0} actH={actH:F0}"; StateHasChanged(); }
                 return;
             }
 
-            // Compute DPI scale from root element bounds vs screenshot natural size
-            var rootBounds = GetRootBounds();
-            if (rootBounds == null)
+            // Compute DPI scale and window dimensions from windowBounds or fallback root bounds
+            var (windowWidth, windowHeight, dpiScale) = GetWindowMetrics(dims.NaturalWidth, dims.NaturalHeight);
+            if (windowWidth <= 0 || windowHeight <= 0)
             {
-                inspectDebug = "No root bounds found";
-                StateHasChanged();
+                if (hitTestDebug) { hitTestDebugInfo = "No window metrics available"; StateHasChanged(); }
                 return;
             }
 
-            // Window width in logical points (root bounds X offset + width = full window width)
-            var windowWidth = rootBounds.X + rootBounds.Width;
-            var dpiScale = dims.NaturalWidth / windowWidth;
-            if (dpiScale <= 0) dpiScale = 1;
+            // Map click to logical MAUI points (window coordinate space)
+            // windowWidth/Height are in logical points; map directly from click position ratio
+            var logicalX = (mx / actW) * windowWidth;
+            var logicalY = (my / actH) * windowHeight;
 
-            // Map click to logical MAUI points (full window coordinate space)
-            var logicalX = (mx / actW) * dims.NaturalWidth / dpiScale;
-            var logicalY = (my / actH) * dims.NaturalHeight / dpiScale;
-
-            // Try server-side hit test first (uses MAUI's native GetVisualTreeElements)
+            // Try server-side hit test first — API expects logical points (window coordinates)
             DevFlowElementInfo? hit = null;
             try
             {
                 var hitResult = await Client.HitTestAsync(logicalX, logicalY, selectedWindowIndex);
                 if (hitResult?.Elements.Count > 0)
                 {
-                    // Elements are deepest-first; find the first match in our tree
-                    // that isn't under an inactive Shell page
+                    // API returns synthetic elements first, then MAUI elements — take the first match in our tree
+                    string? hitNames = null;
+                    if (hitTestDebug)
+                        hitNames = string.Join("→", hitResult.Elements.Select(h => $"{h.Type}[{(FindElementById(treeItems, h.Id) != null ? "✓" : "✗")}]"));
                     foreach (var hitElement in hitResult.Elements)
                     {
                         var candidate = FindElementById(treeItems, hitElement.Id);
-                        if (candidate != null && !IsUnderInactiveShellItem(candidate))
+                        if (candidate != null)
                         {
+                            // Enrich tree element with bounds from hit result if missing
+                            if (candidate.WindowBounds == null && hitElement.WindowBounds != null)
+                                candidate.WindowBounds = hitElement.WindowBounds;
+                            if (candidate.Bounds == null && hitElement.Bounds != null)
+                                candidate.Bounds = hitElement.Bounds;
                             hit = candidate;
-                            inspectDebug = $"HIT (server): {hit.Type} [{hitElement.Id}] at ({logicalX:F0},{logicalY:F0})";
+                            if (hitTestDebug) { hitTestDebugInfo = $"HIT: {hit.Type} | sent=({logicalX:F1},{logicalY:F1}) win={windowWidth:F0}×{windowHeight:F0} dpi={dpiScale:F1} | {hitNames}"; StateHasChanged(); }
                             break;
                         }
                     }
@@ -589,48 +632,85 @@
             if (hit == null)
             {
                 hit = HitTest(treeItems, logicalX, logicalY);
-                if (hit != null)
-                    inspectDebug = $"HIT (client): {hit.Type} at ({logicalX:F0},{logicalY:F0})";
+                if (hit != null && hitTestDebug) { hitTestDebugInfo = $"HIT (client): {hit.Type} at ({logicalX:F0},{logicalY:F0}) DPI={dpiScale:F1}"; StateHasChanged(); }
             }
 
             if (hit != null)
-            {
                 await RevealAndSelectElement(hit);
-            }
-            else
+            else if (hitTestDebug)
             {
-                inspectDebug = $"No hit at ({logicalX:F0},{logicalY:F0}) dpi={dpiScale:F1}";
+                hitTestDebugInfo = $"No hit at ({logicalX:F0},{logicalY:F0}) DPI={dpiScale:F1} Win={windowWidth:F0}×{windowHeight:F0}";
                 StateHasChanged();
             }
         }
         catch (Exception ex)
         {
-            inspectDebug = $"ERROR: {ex.Message}";
-            StateHasChanged();
+            if (hitTestDebug) { hitTestDebugInfo = $"ERROR: {ex.Message}"; StateHasChanged(); }
         }
     }
 
-    private DevFlowBoundsInfo? GetRootBounds()
+    /// <summary>
+    /// Derives window dimensions (in logical points) and DPI scale from tree data.
+    /// Prefers windowBounds (absolute window coords) when available; falls back to root bounds heuristic.
+    /// </summary>
+    private (double windowWidth, double windowHeight, double dpiScale) GetWindowMetrics(double screenshotPixelWidth, double screenshotPixelHeight)
     {
-        return FindLargestBounds(treeItems);
+        // Find the largest windowBounds to determine full window dimensions
+        var wb = FindLargestWindowBounds(treeItems);
+        if (wb != null && wb.Width > 0 && wb.Height > 0)
+        {
+            var winW = wb.X + wb.Width;
+            var winH = wb.Y + wb.Height;
+            var scale = screenshotPixelWidth / winW;
+            return (winW, winH, scale > 0 ? scale : 1);
+        }
+
+        // Fallback: find largest element bounds to approximate window size
+        DevFlowBoundsInfo? best = null;
+        double bestArea = 0;
+        FindLargestBoundsRecursive(treeItems, ref best, ref bestArea);
+        if (best != null)
+        {
+            var winW = best.X + best.Width;
+            var winH = best.Y + best.Height;
+            var scale = screenshotPixelWidth / winW;
+            return (winW, winH, scale > 0 ? scale : 1);
+        }
+
+        return (0, 0, 1);
     }
 
-    private DevFlowBoundsInfo? FindLargestBounds(List<DevFlowElementInfo> items)
+    private DevFlowBoundsInfo? FindLargestWindowBounds(List<DevFlowElementInfo> items)
     {
         DevFlowBoundsInfo? best = null;
         double bestArea = 0;
-        FindLargestBoundsRecursive(items, ref best, ref bestArea);
+        FindLargestWindowBoundsRecursive(items, ref best, ref bestArea);
         return best;
+    }
+
+    private void FindLargestWindowBoundsRecursive(List<DevFlowElementInfo> items, ref DevFlowBoundsInfo? best, ref double bestArea)
+    {
+        foreach (var item in items)
+        {
+            var wb = item.WindowBounds;
+            if (wb != null && wb.Width > 0 && wb.Height > 0)
+            {
+                var area = wb.Width * wb.Height;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = wb;
+                }
+            }
+            if (item.Children?.Count > 0)
+                FindLargestWindowBoundsRecursive(item.Children, ref best, ref bestArea);
+        }
     }
 
     private void FindLargestBoundsRecursive(List<DevFlowElementInfo> items, ref DevFlowBoundsInfo? best, ref double bestArea)
     {
         foreach (var item in items)
         {
-            // Skip inactive ShellItem subtrees
-            if (_activeShellItemIds.Count > 0 && item.Type.Contains("ShellItem") && !_activeShellItemIds.Contains(item.Id))
-                continue;
-
             if (item.Bounds != null && item.Bounds.Width > 0 && item.Bounds.Height > 0)
             {
                 var area = item.Bounds.Width * item.Bounds.Height;
@@ -645,111 +725,30 @@
         }
     }
 
-    /// <summary>
-    /// Detects the active ShellItem in a Shell app by querying Shell.CurrentItem.Title.
-    /// Returns a set of ShellItem IDs that are considered "active" (should be hit-tested).
-    /// For non-Shell apps, returns an empty set (no filtering needed).
-    /// </summary>
-    private async Task<HashSet<string>> DetectActiveShellItemIds(List<DevFlowElementInfo> items)
-    {
-        var result = new HashSet<string>();
-        try
-        {
-            // Find Shell element and its ShellItem children
-            var shell = FindElementByType(items, "AppShell") ?? FindElementByType(items, "Shell");
-            if (shell?.Children == null) return result;
-
-            var shellItems = shell.Children.Where(c => c.Type.Contains("ShellItem")).ToList();
-            if (shellItems.Count <= 1) return result; // Single page or no Shell — no filtering needed
-
-            // Query Shell.CurrentItem.Title to find the active tab
-            var currentTitle = await Client.GetPropertyAsync(shell.Id, "CurrentItem.Title");
-            if (string.IsNullOrEmpty(currentTitle)) return result;
-
-            foreach (var si in shellItems)
-            {
-                if (string.Equals(si.Text, currentTitle, StringComparison.OrdinalIgnoreCase))
-                    result.Add(si.Id);
-            }
-        }
-        catch { }
-        return result;
-    }
-
-    private DevFlowElementInfo? FindElementByType(List<DevFlowElementInfo> items, string type)
-    {
-        foreach (var item in items)
-        {
-            if (item.Type.Contains(type)) return item;
-            if (item.Children?.Count > 0)
-            {
-                var found = FindElementByType(item.Children, type);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Checks if an element is under an inactive ShellItem (should be skipped during hit testing).
-    /// </summary>
-    private bool IsUnderInactiveShellItem(DevFlowElementInfo element)
-    {
-        if (_activeShellItemIds.Count == 0) return false; // No Shell filtering needed
-
-        var path = FindPathTo(treeItems, element.Id);
-        if (path == null) return false;
-
-        foreach (var ancestor in path)
-        {
-            if (ancestor.Type.Contains("ShellItem") && !_activeShellItemIds.Contains(ancestor.Id))
-                return true;
-        }
-        return false;
-    }
-
-    private DevFlowElementInfo? HitTest(List<DevFlowElementInfo> items, double x, double y,
-        double absOffX = 0, double absOffY = 0, DevFlowBoundsInfo? parentBounds = null)
+    private DevFlowElementInfo? HitTest(List<DevFlowElementInfo> items, double x, double y)
     {
         DevFlowElementInfo? best = null;
+        HitTestRecursive(items, x, y, ref best);
+        return best;
+    }
+
+    private void HitTestRecursive(List<DevFlowElementInfo> items, double x, double y, ref DevFlowElementInfo? best)
+    {
         foreach (var item in items)
         {
-            // Skip inactive ShellItem subtrees entirely
-            if (_activeShellItemIds.Count > 0 && item.Type.Contains("ShellItem") && !_activeShellItemIds.Contains(item.Id))
-                continue;
-
-            var b = item.Bounds;
-            var validBounds = b != null && b.Width > 0 && b.Height > 0;
-
-            // Compute absolute position, skipping duplicate offsets (same position+size as parent)
-            var itemAbsX = absOffX;
-            var itemAbsY = absOffY;
-            if (validBounds)
-            {
-                if (parentBounds == null ||
-                    Math.Abs(b!.X - parentBounds.X) > 0.5 || Math.Abs(b.Y - parentBounds.Y) > 0.5 ||
-                    Math.Abs(b.Width - parentBounds.Width) > 0.5 || Math.Abs(b.Height - parentBounds.Height) > 0.5)
-                {
-                    itemAbsX += b!.X;
-                    itemAbsY += b.Y;
-                }
-            }
-
-            if (validBounds && item.IsVisible &&
-                x >= itemAbsX && x <= itemAbsX + b!.Width &&
-                y >= itemAbsY && y <= itemAbsY + b.Height)
+            // Prefer windowBounds (absolute window coordinates)
+            var wb = item.WindowBounds;
+            if (wb != null && wb.Width > 0 && wb.Height > 0 && item.IsVisible &&
+                x >= wb.X && x <= wb.X + wb.Width &&
+                y >= wb.Y && y <= wb.Y + wb.Height)
             {
                 best = item;
             }
 
             // Always recurse into children (hidden containers like Window/Shell have visible content)
             if (item.Children?.Count > 0)
-            {
-                var childHit = HitTest(item.Children, x, y, itemAbsX, itemAbsY, validBounds ? b : parentBounds);
-                if (childHit != null) best = childHit;
-            }
+                HitTestRecursive(item.Children, x, y, ref best);
         }
-        return best;
     }
 
     private DevFlowElementInfo? FindElementById(List<DevFlowElementInfo> items, string id)
@@ -782,6 +781,12 @@
 
     private (double x, double y, double w, double h)? GetAbsoluteBounds(DevFlowElementInfo element)
     {
+        // Use windowBounds if available (absolute window coordinates from MauiDevFlow)
+        var wb = element.WindowBounds;
+        if (wb != null && wb.Width > 0 && wb.Height > 0)
+            return (wb.X, wb.Y, wb.Width, wb.Height);
+
+        // Fallback: accumulate relative bounds from ancestor path (older agents)
         if (element.Bounds == null || element.Bounds.Width <= 0) return null;
         var path = FindPathTo(treeItems, element.Id);
         if (path == null) return null;
@@ -793,8 +798,6 @@
             var b = ancestor.Bounds;
             if (b != null && b.Width > 0 && b.Height > 0)
             {
-                // Skip duplicate offsets: when child has same position+size as parent,
-                // MAUI's Frame is reporting absolute-ish coords, not relative-to-parent
                 if (prevBounds == null ||
                     Math.Abs(b.X - prevBounds.X) > 0.5 || Math.Abs(b.Y - prevBounds.Y) > 0.5 ||
                     Math.Abs(b.Width - prevBounds.Width) > 0.5 || Math.Abs(b.Height - prevBounds.Height) > 0.5)
@@ -852,17 +855,14 @@
     private async Task UpdateOverlayAsync()
     {
         overlayStyle = null;
-        if (selectedElement?.Bounds == null || screenshotData == null) return;
+        if (selectedElement == null || screenshotData == null) return;
 
         var absBounds = GetAbsoluteBounds(selectedElement);
-        if (absBounds == null) return;
-
-        var rootBounds = GetRootBounds();
-        if (rootBounds == null) return;
-
-        var windowWidth = rootBounds.Width + rootBounds.X;
-        var windowHeight = rootBounds.Height + rootBounds.Y;
-        if (windowWidth <= 0 || windowHeight <= 0) return;
+        if (absBounds == null)
+        {
+            if (hitTestDebug) { hitTestDebugInfo += $" | overlay: no absBounds (B={selectedElement.Bounds != null} WB={selectedElement.WindowBounds != null})"; StateHasChanged(); }
+            return;
+        }
 
         try
         {
@@ -871,19 +871,34 @@
                 "(function() { var img = document.querySelector('.screenshot-img');" +
                 "if (!img) return null;" +
                 "var r = img.getBoundingClientRect();" +
-                "return { width: r.width, height: r.height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight }; })()");
+                "return { width: r.width, height: r.height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, left: r.left, top: r.top }; })()");
 
             if (dims == null || dims.NaturalWidth <= 0 || dims.NaturalHeight <= 0) return;
 
-            var dpiScale = dims.NaturalWidth / windowWidth;
-            if (dpiScale <= 0) dpiScale = 1;
+            var (windowWidth, windowHeight, dpiScale) = GetWindowMetrics(dims.NaturalWidth, dims.NaturalHeight);
+            if (windowWidth <= 0 || windowHeight <= 0) return;
+
+            // Account for object-fit: contain letterboxing
+            var imgAspect = dims.NaturalWidth / dims.NaturalHeight;
+            var boxAspect = dims.Width / dims.Height;
+            double actW, actH, offX, offY;
+            if (imgAspect > boxAspect)
+            {
+                actW = dims.Width; actH = dims.Width / imgAspect;
+                offX = 0; offY = (dims.Height - actH) / 2;
+            }
+            else
+            {
+                actH = dims.Height; actW = dims.Height * imgAspect;
+                offX = (dims.Width - actW) / 2; offY = 0;
+            }
 
             // Convert logical bounds to pixels in the rendered image, with padding so border sits outside the element
             var pad = 3.0;
-            var pxLeft = (absBounds.Value.x / windowWidth) * dims.Width - pad;
-            var pxTop = (absBounds.Value.y / windowHeight) * dims.Height - pad;
-            var pxWidth = (absBounds.Value.w / windowWidth) * dims.Width + pad * 2;
-            var pxHeight = (absBounds.Value.h / windowHeight) * dims.Height + pad * 2;
+            var pxLeft = (absBounds.Value.x / windowWidth) * actW + offX - pad;
+            var pxTop = (absBounds.Value.y / windowHeight) * actH + offY - pad;
+            var pxWidth = (absBounds.Value.w / windowWidth) * actW + pad * 2;
+            var pxHeight = (absBounds.Value.h / windowHeight) * actH + pad * 2;
 
             overlayStyle = $"left: {pxLeft:F1}px; top: {pxTop:F1}px; width: {pxWidth:F1}px; height: {pxHeight:F1}px;";
         }
@@ -922,6 +937,11 @@
                     var detailed = await Client.GetElementAsync(element.Id);
                     if (detailed != null && selectedElementId == element.Id)
                     {
+                        // Preserve bounds from hit test enrichment if the detailed response lacks them
+                        if (detailed.WindowBounds == null && element.WindowBounds != null)
+                            detailed.WindowBounds = element.WindowBounds;
+                        if (detailed.Bounds == null && element.Bounds != null)
+                            detailed.Bounds = element.Bounds;
                         selectedElement = detailed;
                     }
 
@@ -2366,7 +2386,6 @@
     }
 
     .tree-screenshot-pane {
-        border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
         flex-shrink: 0;
@@ -2464,18 +2483,20 @@
     /* Screenshot */
     .screenshot-container {
         flex: 1;
-        overflow: auto;
+        overflow: hidden;
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
         padding: 0.5rem;
+        min-height: 0;
     }
 
     .screenshot-img {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
-        border-radius: 4px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
     }
 
     .screenshot-img.inspect-cursor {
@@ -2490,7 +2511,6 @@
 
     .screenshot-wrapper {
         position: relative;
-        display: inline-block;
         max-width: 100%;
         max-height: 100%;
     }
@@ -2517,6 +2537,39 @@
     .screenshot-placeholder i {
         font-size: 2rem;
         opacity: 0.3;
+    }
+
+    .hit-test-debug {
+        font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
+        padding: 4px 8px;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .hit-test-text {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .hit-test-copy {
+        background: none;
+        border: none;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+    }
+
+    .hit-test-copy:hover {
+        color: var(--text-primary);
     }
 
     /* Tree nodes */

@@ -104,6 +104,9 @@ public class DevFlowElementInfo
     [JsonPropertyName("bounds")]
     public DevFlowBoundsInfo? Bounds { get; set; }
 
+    [JsonPropertyName("windowBounds")]
+    public DevFlowBoundsInfo? WindowBounds { get; set; }
+
     [JsonPropertyName("gestures")]
     public List<string>? Gestures { get; set; }
 
@@ -163,6 +166,9 @@ public class DevFlowHitTestElement
 
     [JsonPropertyName("bounds")]
     public DevFlowBoundsInfo? Bounds { get; set; }
+
+    [JsonPropertyName("windowBounds")]
+    public DevFlowBoundsInfo? WindowBounds { get; set; }
 
     [JsonPropertyName("text")]
     public string? Text { get; set; }
