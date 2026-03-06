@@ -112,10 +112,10 @@
                                 <button class="code-block__copy">Copy</button>
                             </div>
                             <pre><code><span class="token-comment"># Required: Core agent</span>
-dotnet add package Redth.MauiDevFlow.Agent
+<span class="token-command">dotnet</span> <span class="token-function">add</span> <span class="token-function">package</span> <span class="token-param">Redth.MauiDevFlow.Agent</span>
 
 <span class="token-comment"># Optional: Blazor WebView support (DOM, console, CDP)</span>
-dotnet add package Redth.MauiDevFlow.Blazor</code></pre>
+<span class="token-command">dotnet</span> <span class="token-function">add</span> <span class="token-function">package</span> <span class="token-param">Redth.MauiDevFlow.Blazor</span></code></pre>
                         </div>
                         <div class="callout callout--tip">
                             <p class="callout__title"><i class="fas fa-lightbulb"></i> Tip</p>
@@ -167,9 +167,9 @@ dotnet add package Redth.MauiDevFlow.Blazor</code></pre>
                                 <button class="code-block__copy">Copy</button>
                             </div>
                             <pre><code><span class="token-comment"># Build and run on your target platform</span>
-dotnet build -f net10.0-ios -t:Run
-dotnet build -f net10.0-android -t:Run
-dotnet build -f net10.0-maccatalyst -t:Run</code></pre>
+<span class="token-command">dotnet</span> <span class="token-function">build</span> <span class="token-flag">-f</span> <span class="token-param">net10.0-ios</span> <span class="token-flag">-t:</span><span class="token-param">Run</span>
+<span class="token-command">dotnet</span> <span class="token-function">build</span> <span class="token-flag">-f</span> <span class="token-param">net10.0-android</span> <span class="token-flag">-t:</span><span class="token-param">Run</span>
+<span class="token-command">dotnet</span> <span class="token-function">build</span> <span class="token-flag">-f</span> <span class="token-param">net10.0-maccatalyst</span> <span class="token-flag">-t:</span><span class="token-param">Run</span></code></pre>
                         </div>
                         <p>Then in <strong>MAUI Sherpa</strong>:</p>
                         <ol style="color: var(--ink-secondary); line-height: 2; padding-left: var(--space-6); margin-top: var(--space-3);">
@@ -195,7 +195,7 @@ dotnet build -f net10.0-maccatalyst -t:Run</code></pre>
                         <span class="code-block__lang">Terminal</span>
                         <button class="code-block__copy">Copy</button>
                     </div>
-                    <pre><code>adb reverse tcp:19223 tcp:19223</code></pre>
+                    <pre><code><span class="token-command">adb</span> <span class="token-function">reverse</span> <span class="token-param">tcp:19223</span> <span class="token-param">tcp:19223</span></code></pre>
                 </div>
             </div>
 
@@ -315,22 +315,22 @@ dotnet build -f net10.0-maccatalyst -t:Run</code></pre>
                         <button class="code-block__copy">Copy</button>
                     </div>
                     <pre><code><span class="token-comment"># Install the CLI</span>
-dotnet tool install --global Redth.MauiDevFlow.CLI
+<span class="token-command">dotnet</span> <span class="token-function">tool</span> <span class="token-function">install</span> <span class="token-flag">--global</span> <span class="token-param">Redth.MauiDevFlow.CLI</span>
 
 <span class="token-comment"># Wait for app to connect</span>
-maui-devflow wait
+<span class="token-command">maui-devflow</span> <span class="token-function">wait</span>
 
 <span class="token-comment"># Browse visual tree</span>
-maui-devflow MAUI tree
+<span class="token-command">maui-devflow</span> <span class="token-function">MAUI</span> <span class="token-function">tree</span>
 
 <span class="token-comment"># Take a screenshot</span>
-maui-devflow MAUI screenshot --output screen.png
+<span class="token-command">maui-devflow</span> <span class="token-function">MAUI</span> <span class="token-function">screenshot</span> <span class="token-flag">--output</span> <span class="token-param">screen.png</span>
 
 <span class="token-comment"># Inspect Blazor DOM</span>
-maui-devflow cdp snapshot
+<span class="token-command">maui-devflow</span> <span class="token-function">cdp</span> <span class="token-function">snapshot</span>
 
 <span class="token-comment"># Read application logs</span>
-maui-devflow MAUI logs --limit 50</code></pre>
+<span class="token-command">maui-devflow</span> <span class="token-function">MAUI</span> <span class="token-function">logs</span> <span class="token-flag">--limit</span> <span class="token-param">50</span></code></pre>
                 </div>
 
                 <p style="color: var(--ink-secondary);">
