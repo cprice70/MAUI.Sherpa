@@ -733,6 +733,13 @@ public interface ISimulatorService
     void StopRoutePlayback();
     bool IsPlayingRoute { get; }
     event Action? RoutePlaybackStateChanged;
+
+    // Privacy permissions
+    Task<IReadOnlyList<AppPermission>> GetPermissionsAsync(string udid, bool includeSystemApps = false);
+    Task<bool> GrantPermissionAsync(string udid, string bundleId, string simctlService, IProgress<string>? progress = null);
+    Task<bool> RevokePermissionAsync(string udid, string bundleId, string simctlService, IProgress<string>? progress = null);
+    Task<bool> ResetPermissionAsync(string udid, string bundleId, string simctlService, IProgress<string>? progress = null);
+    Task<bool> ResetAllPermissionsAsync(string udid, IProgress<string>? progress = null);
 }
 
 /// <summary>
@@ -875,6 +882,70 @@ public record SimulatorApp(
     string? DataContainerPath,
     string? BundlePath
 );
+
+/// <summary>
+/// Permission status for a TCC service on a simulator
+/// </summary>
+public enum PermissionStatus
+{
+    NotDetermined = 0,
+    Denied = 1,
+    Allowed = 2,
+    Limited = 3
+}
+
+/// <summary>
+/// A known privacy permission that can be managed on iOS simulators
+/// </summary>
+public record PermissionDefinition(
+    string DisplayName,
+    string Icon,
+    string? SimctlService,
+    string TccServiceKey,
+    string? PlistKey
+)
+{
+    public bool CanModify => SimctlService is not null;
+}
+
+/// <summary>
+/// Current state of a privacy permission for a specific app on a simulator
+/// </summary>
+public record AppPermission(
+    string BundleId,
+    PermissionDefinition Permission,
+    PermissionStatus Status,
+    string? UsageDescription = null,
+    bool? HasPlistKey = null
+);
+
+/// <summary>
+/// Known iOS privacy permissions with TCC↔simctl mappings
+/// </summary>
+public static class SimulatorPermissions
+{
+    public static readonly IReadOnlyList<PermissionDefinition> All = new[]
+    {
+        new PermissionDefinition("Calendar",          "fa-calendar",       "calendar",         "kTCCServiceCalendar",          "NSCalendarsUsageDescription"),
+        new PermissionDefinition("Camera",            "fa-camera",         null,               "kTCCServiceCamera",            "NSCameraUsageDescription"),
+        new PermissionDefinition("Contacts",          "fa-address-book",   "contacts",         "kTCCServiceAddressBook",       "NSContactsUsageDescription"),
+        new PermissionDefinition("Face ID",           "fa-face-viewfinder", null,              "kTCCServiceFaceID",            "NSFaceIDUsageDescription"),
+        new PermissionDefinition("Location (In Use)", "fa-location-dot",   "location",         "kTCCServiceLocation",          "NSLocationWhenInUseUsageDescription"),
+        new PermissionDefinition("Location (Always)", "fa-location-crosshairs", "location-always", "kTCCServiceLocationAlways", "NSLocationAlwaysUsageDescription"),
+        new PermissionDefinition("Media Library",     "fa-music",          "media-library",    "kTCCServiceMediaLibrary",      "NSAppleMusicUsageDescription"),
+        new PermissionDefinition("Microphone",        "fa-microphone",     "microphone",       "kTCCServiceMicrophone",        "NSMicrophoneUsageDescription"),
+        new PermissionDefinition("Motion & Fitness",  "fa-person-running", "motion",           "kTCCServiceMotion",            "NSMotionUsageDescription"),
+        new PermissionDefinition("Photos",            "fa-images",         "photos",           "kTCCServicePhotos",            "NSPhotoLibraryUsageDescription"),
+        new PermissionDefinition("Photos (Add Only)", "fa-image",          "photos-add",       "kTCCServicePhotosAdd",         "NSPhotoLibraryAddUsageDescription"),
+        new PermissionDefinition("Reminders",         "fa-list-check",     "reminders",        "kTCCServiceReminders",         "NSRemindersUsageDescription"),
+        new PermissionDefinition("Siri",              "fa-waveform-lines", "siri",             "kTCCServiceSiri",              "NSSiriUsageDescription"),
+        new PermissionDefinition("Speech Recognition","fa-comment-dots",   null,               "kTCCServiceSpeechRecognition", "NSSpeechRecognitionUsageDescription"),
+        new PermissionDefinition("Bluetooth",         "fa-bluetooth-b",    null,               "kTCCServiceBluetoothAlways",   "NSBluetoothAlwaysUsageDescription"),
+    };
+
+    public static readonly IReadOnlyDictionary<string, PermissionDefinition> ByTccKey =
+        All.ToDictionary(p => p.TccServiceKey, p => p);
+}
 
 // ============================================================================
 // iOS Simulator Log Streaming
