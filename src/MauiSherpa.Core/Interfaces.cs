@@ -1,3 +1,4 @@
+using MauiSherpa.Core.Models.Profiling;
 using MauiSherpa.Core.Services;
 
 namespace MauiSherpa.Core.Interfaces;
@@ -217,7 +218,194 @@ public interface IScreenCaptureService
     Task<byte[]?> StopRecordingAsync(CancellationToken ct = default);
 }
 
+// ============================================================================
+// Profiling
+// ============================================================================
 
+public interface IProfilingCatalogService
+{
+    Task<ProfilingCatalog> GetCatalogAsync(CancellationToken ct = default);
+    Task<ProfilingPlatformCapabilities> GetCapabilitiesAsync(ProfilingTargetPlatform platform, CancellationToken ct = default);
+    ProfilingSessionDefinition CreateSessionDefinition(
+        ProfilingTarget target,
+        ProfilingScenarioKind scenario,
+        string? name = null,
+        IReadOnlyList<ProfilingCaptureKind>? captureKinds = null,
+        string? appId = null,
+        TimeSpan? duration = null,
+        IReadOnlyDictionary<string, string>? tags = null);
+    ProfilingSessionValidationResult ValidateSessionDefinition(
+        ProfilingSessionDefinition definition,
+        ProfilingPlatformCapabilities capabilities);
+}
+
+public interface IProfilingCapabilityProvider
+{
+    ProfilingTargetPlatform Platform { get; }
+    Task<ProfilingPlatformCapabilities?> GetCapabilitiesAsync(CancellationToken ct = default);
+}
+
+public interface IProfilingPrerequisitesService
+{
+    Task<ProfilingPrerequisiteReport> GetPrerequisitesAsync(
+        ProfilingTargetPlatform platform,
+        IReadOnlyList<ProfilingCaptureKind>? captureKinds = null,
+        string? workingDirectory = null,
+        CancellationToken ct = default);
+}
+
+public interface IProfilingCaptureOrchestrationService
+{
+    Task<ProfilingCapturePlan> PlanCaptureAsync(
+        ProfilingSessionDefinition definition,
+        ProfilingCapturePlanOptions? options = null,
+        CancellationToken ct = default);
+}
+
+public interface IProfilingArtifactLibraryService
+{
+    Task<IReadOnlyList<ProfilingArtifactLibraryEntry>> GetArtifactsAsync(
+        ProfilingArtifactLibraryQuery? query = null,
+        CancellationToken ct = default);
+    Task<ProfilingArtifactLibraryEntry?> GetArtifactAsync(string artifactId, CancellationToken ct = default);
+    Task<ProfilingArtifactLibraryEntry> SaveArtifactAsync(
+        ProfilingArtifactLibrarySaveRequest request,
+        CancellationToken ct = default);
+    Task DeleteArtifactAsync(string artifactId, bool deleteFile = false, CancellationToken ct = default);
+    Task<string?> GetArtifactPathAsync(string artifactId, CancellationToken ct = default);
+    string GetDefaultArtifactDirectory(string sessionId);
+    event Action? OnArtifactsChanged;
+}
+
+public interface IProfilingArtifactAnalysisService
+{
+    Task<ProfilingArtifactAnalysisResult> AnalyzeArtifactAsync(string artifactId, CancellationToken ct = default);
+    Task<IReadOnlyList<ProfilingArtifactAnalysis>> AnalyzeArtifactsAsync(
+        ProfilingArtifactLibraryQuery? query = null,
+        CancellationToken ct = default);
+}
+
+/// <summary>
+/// Executes a profiling capture plan as a coordinated multi-process pipeline.
+/// Handles dependency ordering, parallel execution, long-running processes,
+/// graceful stop, and artifact collection.
+/// </summary>
+public interface IProfilingSessionRunner : IDisposable
+{
+    /// <summary>Current pipeline state</summary>
+    ProfilingPipelineState State { get; }
+
+    /// <summary>Status of each step in the pipeline</summary>
+    IReadOnlyList<ProfilingStepStatus> Steps { get; }
+
+    /// <summary>Fired when pipeline state changes</summary>
+    event EventHandler<ProfilingPipelineStateChangedEventArgs>? PipelineStateChanged;
+
+    /// <summary>Fired when a step's state changes</summary>
+    event EventHandler<ProfilingStepStateChangedEventArgs>? StepStateChanged;
+
+    /// <summary>Fired when a step produces output</summary>
+    event EventHandler<ProfilingStepOutputEventArgs>? StepOutputReceived;
+
+    /// <summary>
+    /// Execute the full pipeline. Returns when all steps complete (or fail/cancel).
+    /// </summary>
+    Task<ProfilingPipelineResult> RunAsync(ProfilingCapturePlan plan, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gracefully stop capture — sends SIGINT to ManualStop steps, waits for processes
+    /// to flush output files and exit before returning.
+    /// </summary>
+    Task StopCaptureAsync();
+
+    /// <summary>
+    /// Abort everything immediately — kills all running processes.
+    /// </summary>
+    void Cancel();
+
+    /// <summary>
+    /// Collect a GC dump on demand while the pipeline is running.
+    /// Returns the path to the .gcdump file, or null if collection failed.
+    /// </summary>
+    Task<string?> CollectGcDumpAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether a trace capture is currently active.
+    /// </summary>
+    bool IsTraceActive { get; }
+
+    /// <summary>
+    /// Start an on-demand trace capture. Returns the step ID or null if it cannot start.
+    /// The trace runs until StopTraceAsync() is called.
+    /// </summary>
+    string? StartTraceAsync();
+
+    /// <summary>
+    /// Stop the currently running on-demand trace.
+    /// </summary>
+    Task StopTraceAsync();
+}
+
+/// <summary>
+/// Parses and reports on GC dump (.gcdump) files by shelling out to dotnet-gcdump.
+/// </summary>
+public interface IGcDumpReportService
+{
+    /// <summary>
+    /// Parse a .gcdump file and return structured heap statistics.
+    /// </summary>
+    Task<GcDumpReport?> GetReportAsync(string gcdumpPath, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Converts profiling artifacts between formats (e.g., .nettrace → .speedscope.json).
+/// </summary>
+public interface IProfilingArtifactConverterService
+{
+    /// <summary>
+    /// Convert a .nettrace file to speedscope JSON format.
+    /// Returns the path to the converted file, or null on failure.
+    /// </summary>
+    Task<string?> ConvertToSpeedscopeAsync(string nettracePath, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Manages persistent profiling session storage. Each session is a folder
+/// containing a session.json manifest and artifact files.
+/// </summary>
+public interface IProfilingSessionStorageService
+{
+    /// <summary>List all sessions, ordered by most recent first.</summary>
+    Task<IReadOnlyList<ProfilingSessionManifest>> GetSessionsAsync(CancellationToken ct = default);
+
+    /// <summary>Get a single session by ID.</summary>
+    Task<ProfilingSessionManifest?> GetSessionAsync(string sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Save (create or update) a session manifest.
+    /// If the session folder doesn't exist, it is created.
+    /// </summary>
+    Task SaveSessionAsync(ProfilingSessionManifest manifest, CancellationToken ct = default);
+
+    /// <summary>Delete a session and its folder.</summary>
+    Task DeleteSessionAsync(string sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the directory path for a session. Creates the directory if it doesn't exist.
+    /// </summary>
+    string GetSessionDirectoryPath(string sessionId);
+
+    /// <summary>Generate a new unique session ID based on project name and date.</summary>
+    string GenerateSessionId(string? projectName = null);
+
+    /// <summary>Export a session as a .zip file.</summary>
+    Task ExportSessionAsync(string sessionId, string outputZipPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Import a session from a .zip file. Returns the imported manifest, or null on failure.
+    /// </summary>
+    Task<ProfilingSessionManifest?> ImportSessionAsync(string zipPath, CancellationToken ct = default);
+}
 
 public interface IAndroidSdkSettingsService
 {
@@ -2198,6 +2386,22 @@ public interface ICopilotToolsService
 }
 
 /// <summary>
+/// Builds lightweight, structured profiling context for Copilot without requiring raw trace uploads.
+/// </summary>
+public interface IProfilingContextService
+{
+    /// <summary>
+    /// Gets the currently available local profiling targets discovered from MauiDevFlow.
+    /// </summary>
+    Task<IReadOnlyList<ProfilingTargetInfo>> GetAvailableTargetsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Builds a lightweight profiling snapshot for the requested target.
+    /// </summary>
+    Task<ProfilingSnapshotResult> GetSnapshotAsync(ProfilingSnapshotOptions options, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Service for coordinating splash screen visibility between MAUI and Blazor
 /// </summary>
 public interface ISplashService
@@ -2928,6 +3132,7 @@ public record MauiSherpaSettings
     public PushTestingSettings PushTesting { get; init; } = new();
     public List<PushProject> PushProjects { get; init; } = new();
     public List<PublishProfileData> PublishProfiles { get; init; } = new();
+    public List<ProfilingArtifactLibraryEntry> ProfilingArtifacts { get; init; } = new();
     public DateTime LastModified { get; init; } = DateTime.UtcNow;
 }
 

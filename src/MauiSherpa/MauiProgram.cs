@@ -92,7 +92,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IToolbarService, MauiSherpa.Core.Services.ToolbarService>();
 
         // Process execution services
-        builder.Services.AddSingleton<IProcessExecutionService, ProcessExecutionService>();
+        builder.Services.AddTransient<IProcessExecutionService, ProcessExecutionService>();
         builder.Services.AddSingleton<ProcessModalService>();
         builder.Services.AddSingleton<IProcessModalService>(sp => sp.GetRequiredService<ProcessModalService>());
         builder.Services.AddSingleton<OperationModalService>();
@@ -112,12 +112,22 @@ public static class MauiProgram
         builder.Services.AddSingleton<IDeviceFileService, DeviceFileService>();
         builder.Services.AddSingleton<IDeviceShellService, DeviceShellService>();
         builder.Services.AddSingleton<IScreenCaptureService, ScreenCaptureService>();
+        builder.Services.AddSingleton<IProfilingCatalogService, ProfilingCatalogService>();
+        builder.Services.AddSingleton<IProfilingPrerequisitesService, ProfilingPrerequisitesService>();
+        builder.Services.AddSingleton<IProfilingCaptureOrchestrationService, ProfilingCaptureOrchestrationService>();
+        builder.Services.AddSingleton<IProfilingArtifactLibraryService, ProfilingArtifactLibraryService>();
+        builder.Services.AddSingleton<IProfilingArtifactAnalysisService, ProfilingArtifactAnalysisService>();
+        builder.Services.AddTransient<IProfilingSessionRunner, ProfilingSessionRunnerService>();
+        builder.Services.AddSingleton<IGcDumpReportService, GcDumpReportService>();
+        builder.Services.AddSingleton<IProfilingArtifactConverterService, ProfilingArtifactConverterService>();
+        builder.Services.AddSingleton<IProfilingSessionStorageService, ProfilingSessionStorageService>();
         builder.Services.AddSingleton<IAndroidDeviceToolsService, AndroidDeviceToolsService>();
         builder.Services.AddSingleton<IFirebasePushService, FirebasePushService>();
         builder.Services.AddSingleton<DeviceInspectorService>();
         builder.Services.AddSingleton<DevFlowInspectorService>();
         builder.Services.AddSingleton<IDebugFlagService, DebugFlagService>();
         builder.Services.AddSingleton<IDoctorService, DoctorService>();
+        builder.Services.AddSingleton<IProfilingContextService, ProfilingContextService>();
         builder.Services.AddSingleton<ICopilotToolsService, CopilotToolsService>();
         builder.Services.AddSingleton<ICopilotService, CopilotService>();
         builder.Services.AddSingleton<ICopilotContextService, CopilotContextService>();
@@ -233,6 +243,11 @@ public static class MauiProgram
         builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Apple.GetInstalledXcodesHandler>();
         builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Apple.GetAvailableXcodesHandler>();
         builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.GetConnectedDevicesHandler>();
+        builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Profiling.GetProfilingCatalogHandler>();
+        builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Profiling.GetProfilingCapabilitiesHandler>();
+        builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Profiling.GetProfilingPrerequisitesHandler>();
+        builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Profiling.PlanProfilingCaptureHandler>();
+        builder.Services.AddSingletonAsImplementedInterfaces<MauiSherpa.Core.Handlers.Profiling.AnalyzeProfilingArtifactHandler>();
 
 #if DEBUG
 #if !LINUXGTK

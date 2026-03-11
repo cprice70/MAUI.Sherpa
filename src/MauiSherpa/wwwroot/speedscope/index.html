@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>speedscope</title>
+    <link rel="stylesheet" href="speedscope-GHPHNKXC.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32-3EB2YCUY.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16-VSI62OPJ.png">
+    <link rel="icon" type="image/x-icon" href="favicon-FOKUP5Y5.ico">
+  </head>
+  <body>
+    <script>
+    // Force localProfilePath hash BEFORE speedscope initializes.
+    // This makes speedscope set up window.speedscope.loadFileFromBase64() API.
+    // The hash must be set before the bundle runs because speedscope reads it once at init.
+    // BlazorWebView may strip hashes from iframe src attributes, so we set it here.
+    if (!window.location.hash || !window.location.hash.includes('localProfilePath')) {
+      window.location.hash = 'localProfilePath=_';
+    }
+    </script>
+    <script src="speedscope-Y2522XSH.js"></script>
+    <script>
+    // Load profile data via postMessage OR localStorage (whichever arrives first).
+    // The parent Blazor page writes to both channels for reliability.
+    var _ssLoaded = false;
+
+    function doLoad(name, base64) {
+      if (_ssLoaded) return;
+      function tryLoad(attempts) {
+        if (_ssLoaded) return;
+        if (window.speedscope && window.speedscope.loadFileFromBase64) {
+          _ssLoaded = true;
+          window.speedscope.loadFileFromBase64(name, base64);
+          return;
+        }
+        if (attempts < 80) {
+          setTimeout(function() { tryLoad(attempts + 1); }, 250);
+        }
+      }
+      tryLoad(0);
+    }
+
+    // Channel 1: postMessage from parent
+    window.addEventListener('message', function(event) {
+      if (!event.data || event.data.type !== 'loadProfile') return;
+      if (event.data.name && event.data.base64) {
+        doLoad(event.data.name, event.data.base64);
+      }
+    });
+
+    // Channel 2: localStorage (polled)
+    function checkStorage(attempts) {
+      if (_ssLoaded) return;
+      var data = localStorage.getItem('speedscope_profile_base64');
+      var name = localStorage.getItem('speedscope_profile_name');
+      if (data && name) {
+        localStorage.removeItem('speedscope_profile_base64');
+        localStorage.removeItem('speedscope_profile_name');
+        doLoad(name, data);
+      } else if (attempts < 80) {
+        setTimeout(function() { checkStorage(attempts + 1); }, 250);
+      }
+    }
+    checkStorage(0);
+    </script>
+  </body>
+</html>
